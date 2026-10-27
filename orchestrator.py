@@ -7,8 +7,14 @@ import os
 import sys
 import json
 import time
+import argparse
 import subprocess
 from pathlib import Path
+
+# Cấu hình encoding UTF-8 cho console Windows tránh UnicodeEncodeError
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
 
 REPO_DIR = Path("D:/titsmart-ai-service").resolve()
 STATE_FILE = REPO_DIR / "state.json"
@@ -185,18 +191,40 @@ def run_reviewer_codex(task_desc: str) -> bool:
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Multi-Agent Orchestrator (Antigravity Coder <-> Codex Reviewer)")
+    parser.add_argument("--task", type=str, default=None, help="Mô tả nhiệm vụ mới cần thực hiện")
+    parser.add_argument("--round", type=int, default=None, help="Số thứ tự vòng tính năng (round)")
+    parser.add_argument("--max-iterations", type=int, default=DEFAULT_MAX_ITERATIONS, help="Số lượt lặp tối đa")
+    args = parser.parse_args()
+
     print("==========================================================")
     print("  TITSMART AI: MULTI-AGENT ORCHESTRATOR (CLI-BASED)      ")
     print("==========================================================")
 
     state = read_state()
+
+    # Nếu người dùng truyền --task trực tiếp từ CLI, tự động cập nhật state.json
+    if args.task:
+        state["task"] = args.task
+        state["state"] = "CODING"
+        state["next_actor"] = "ANTIGRAVITY"
+        state["iteration"] = 1
+        state["max_iterations"] = args.max_iterations
+        if args.round:
+            state["round"] = args.round
+        elif "round" not in state:
+            state["round"] = 8
+        write_state(state)
+        print(f"[Orchestrator] Đã thiết lập task mới qua CLI: '{args.task}'")
+
     current_iteration = state.get("iteration", 1)
     max_iterations = state.get("max_iterations", DEFAULT_MAX_ITERATIONS)
     task_desc = state.get("task", "Triển khai tính năng mới")
+    current_round = state.get("round", 8)
 
-    print(f"Khởi động vòng lặp tự động cho task: {task_desc}")
+    print(f"Khởi động vòng lặp tự động: Round {current_round} | Task: {task_desc}")
     print(f"Thư mục làm việc: {REPO_DIR}")
-    print(f"Vòng lặp hiện tại: {current_iteration} / {max_iterations}")
+    print(f"Lượt lặp hiện tại: {current_iteration} / {max_iterations}")
 
     while current_iteration <= max_iterations:
         state = read_state()
