@@ -128,10 +128,11 @@ def run_reviewer_codex(task_desc: str) -> bool:
 
     prompt = (
         f"Bạn là REVIEWER trong repo {REPO_DIR}. "
-        f"Hãy đọc PROJECT_CONTEXT.md, state.json, handoff/coder_report.md và git diff. "
-        f"Review task: {task_desc}. "
-        f"Chạy lệnh 'python -m pytest tests -q' để xác minh. "
-        f"Nếu đạt yêu cầu thì ghi nhận xét vào handoff/review_feedback.md và cập nhật state.json sang state=PASSED, next_actor=ANTIGRAVITY. "
+        f"TỐI ƯU TOKEN: Hãy CHỈ đọc git diff hiện tại và handoff/coder_report.md để nắm phạm vi thay đổi, "
+        f"không đọc lại toàn bộ lịch sử conversation hoặc các file không liên quan.\n"
+        f"Task cần review: {task_desc}.\n"
+        f"Chạy lệnh xác minh: python -m pytest tests -q\n"
+        f"Nếu đạt yêu cầu thì ghi nhận xét ngắn gọn vào handoff/review_feedback.md và cập nhật state.json sang state=PASSED, next_actor=ANTIGRAVITY.\n"
         f"Nếu chưa đạt, ghi lỗi cụ thể vào handoff/review_feedback.md và cập nhật state.json sang state=NEEDS_FIX, next_actor=ANTIGRAVITY."
     )
 
