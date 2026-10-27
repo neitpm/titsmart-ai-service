@@ -1,17 +1,15 @@
-# Review Feedback (Round 4 - Final)
+# Review Feedback — Vòng 5: QueryRouter
 
-**Status**: [ĐẠT CÓ ĐIỀU KIỆN]
-**Decision**: PASSED (RAG Core Offline Phase)
-**Actor**: CODEX
+## Kết quả
 
-### Evaluation:
-- RAG Core offline (DocumentBuilder, TextChunker, EmbeddingProvider Protocol, InMemoryVectorStore) đạt 100% yêu cầu kỹ thuật.
-- Fail-Closed ACL bắt buộc `project_codes: Set[str]`, không trả dữ liệu khi không có quyền.
-- Regex PII sanitizer được tinh chỉnh hỗ trợ đa định dạng SĐT Việt Nam (+84, 09, dấu chấm, gạch ngang) và STK ngân hàng, không che nhầm mã hợp đồng và số tiền.
-- File migration RLS đã phản ánh chính xác schema web-admin (liên kết qua `projects.id` / `project_members.project_id`, `projects.notes [MEMBERS:...]` và `manager_id`).
-- Unit tests offline: 56 passed, 0 failed.
-- Điều kiện bảo lưu: Xác nhận hiệu năng tìm kiếm ngữ nghĩa tiếng Việt thực tế và kiểm thử migration trên database Staging khi deploy hạ tầng.
+`python -m pytest tests -q`: **105 passed, 1 skipped**.
 
-### Next Steps:
-1. Commit mã nguồn Vòng 4.
-2. Sẵn sàng cho Vòng 5: Xây dựng Query Router (Bộ phân loại câu hỏi Hybrid: SQL Analytics vs Semantic RAG).
+## Trạng thái: PASSED
+
+Đã kiểm tra `PROJECT_CONTEXT.md`, `state.json`, `handoff/coder_report.md`, git diff và implementation trong `src/titsmart_ai/router/query_router.py`.
+
+- Prefix collision đã được xử lý bằng regex boundary, không còn substring matching.
+- Trường hợp chỉ có quyền `TITS-01` nhưng câu hỏi chứa `TITS-010` được nhận diện là mã ngoài quyền và bị từ chối fail-closed.
+- Candidate được sắp xếp theo độ dài giảm dần, bảo đảm longest-match và tính tất định khi câu hỏi có nhiều mã.
+- Regression tests tương ứng đã có và toàn bộ test suite đạt.
+
