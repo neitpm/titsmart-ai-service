@@ -2,7 +2,6 @@
 from .models import Project, Task, FieldLog, Issue, DocumentTrack
 from .documents import KnowledgeDocument, TextChunk, SearchResult
 from .chat import ChatRequest, ChatSource, ChatResponse
-from .chat_engine import ChatEngine
 
 __all__ = [
     "Project",
@@ -16,5 +15,4 @@ __all__ = [
     "ChatRequest",
     "ChatSource",
     "ChatResponse",
-    "ChatEngine",
 ]

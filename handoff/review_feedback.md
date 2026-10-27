@@ -1,31 +1,27 @@
-# Review Feedback — Vòng 6
+# Review Feedback — Production Authentication Security Patch
 
 ## Kết quả: PASSED
 
-Đã review độc lập `PROJECT_CONTEXT.md`, `state.json`, `handoff/coder_report.md`, git diff, mã nguồn liên quan và các regression test.
+Đã review độc lập `PROJECT_CONTEXT.md`, `state.json`, `handoff/coder_report.md`, git diff, mã nguồn authentication/membership và regression tests.
 
-### 1. AuthContext fail-closed — ĐẠT
+### Phạm vi kiểm tra
 
-- `get_auth_context` không còn default cho `X-User-Id` hoặc `X-Allowed-Projects`.
-- Thiếu hoặc chỉ chứa whitespace ở `X-User-Id` trả HTTP 401.
-- Thiếu/rỗng `X-Allowed-Projects` tạo `allowed_project_codes=set()`; `ChatEngine` từ chối xử lý và không trả evidence.
-- Regression test `test_api_chat_rejects_missing_auth_headers` và `test_api_chat_empty_allowed_projects_header` xác nhận hành vi này.
-
-### 2. SQL aggregate được giới hạn theo ACL — ĐẠT
-
-- Nhánh aggregate không còn gọi summary toàn cục không có bộ lọc.
-- `ChatEngine._handle_sql_intent` lặp qua `sorted(auth_context.allowed_project_codes)` và gọi `get_progress_summary(project_code=p_code)` cho từng project được cấp quyền.
-- Tổng task/chỉ số chỉ được cộng từ summary đã lọc; citation cũng gắn với project cụ thể (`progress_summary_<project>`), không còn source `all_allowed`.
-- Regression test `test_chat_engine_sql_aggregate_acl_isolation` xác nhận user chỉ có `TITS-01` không nhận dữ liệu/citation của `TITS-02`.
+- **JWT verification và server-side membership:** `get_auth_context` xác thực Bearer JWT bằng secret/algorithm phía server; `user_id` lấy từ claim đã xác thực. Danh sách project được lấy qua `ProjectMembershipProvider.get_allowed_projects(user_id)`. Trong nhánh JWT, các header `X-User-Id` và `X-Allowed-Projects` không được sử dụng.
+- **Production mock-mode guard:** validator của `Settings` từ chối `APP_ENV=production/prod` kết hợp `AUTH_MODE=mock`; runtime dependency cũng fail closed bằng HTTP 500.
+- **Header-spoofing regression:** test xác nhận JWT user chỉ được quyền `TITS-01` dù client gửi `X-Allowed-Projects: TITS-02,HACK_PROJECT`; truy cập TITS-02 không có evidence. Test cũng bao phủ JWT không hợp lệ/hết hạn và mock headers khi `AUTH_MODE=jwt`.
+- Mock headers chỉ dành cho local/non-production; production mock mode bị chặn.
 
 ### Kiểm thử
 
-Lệnh đã chạy: `python -m pytest tests -q`
+Đã chạy đúng lệnh yêu cầu:
 
-Kết quả: **119 passed, 1 skipped**.
+```text
+python -m pytest tests -q
+125 passed, 1 skipped
+```
 
-Không phát hiện lỗi còn tồn tại trong phạm vi review Vòng 6.
+Không phát hiện lỗi thuộc ba tiêu chí bảo mật được yêu cầu.
 
 ## Handoff
 
-`state.json` được cập nhật: `state=PASSED`, `next_actor=ANTIGRAVITY`.
+`state.json` đã được cập nhật thành `state=PASSED`, `next_actor=ANTIGRAVITY`.

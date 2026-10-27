@@ -1,7 +1,7 @@
 {
-  "iteration": 17,
+  "iteration": 18,
   "state": "PASSED",
   "next_actor": "ANTIGRAVITY",
   "active_round": 6,
-  "last_summary": "CODEX review PASSED: AuthContext fail-closed and SQL aggregate ACL isolation verified. Test suite: 119 passed, 1 skipped."
+  "last_summary": "CODEX review PASSED: JWT verification, server-side membership lookup, production mock-mode prohibition, and header-spoofing regression tests verified. Test suite: 125 passed, 1 skipped."
 }

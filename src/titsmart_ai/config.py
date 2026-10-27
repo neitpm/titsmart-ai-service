@@ -29,11 +29,27 @@ class Settings(BaseSettings):
     SUPABASE_ANON_KEY: Optional[str] = None
     SUPABASE_REQUEST_TIMEOUT: float = 10.0  # Timeout giây
 
+    # Authentication & Security
+    AUTH_MODE: str = "mock"  # "mock" hoặc "jwt"
+    INTERNAL_AUTH_SECRET: Optional[str] = None  # Secret cho reverse proxy khi chạy mock mode
+    JWT_SECRET_KEY: Optional[str] = None
+    JWT_ALGORITHM: str = "HS256"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore"
     )
+
+    @field_validator("AUTH_MODE")
+    @classmethod
+    def check_auth_mode_not_mock_in_prod(cls, v: str, info: ValidationInfo) -> str:
+        app_env = str(info.data.get("APP_ENV", "development")).lower()
+        if app_env in ("production", "prod") and v.lower() == "mock":
+            raise ValueError(
+                "LỖI BẢO MẬT: Tuyệt đối không được bật AUTH_MODE='mock' trong môi trường PRODUCTION!"
+            )
+        return v.lower()
 
     @field_validator("SUPABASE_ENV")
     @classmethod
