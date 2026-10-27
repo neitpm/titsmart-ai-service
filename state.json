@@ -4,5 +4,5 @@
   "max_iterations": 10,
   "state": "CODING",
   "next_actor": "ANTIGRAVITY",
-  "task": "Vòng 8: Xây dựng LLM Client Staging Adapter (chỉ cho phép staging/mock, không gọi production), tích hợp ChatEngine với ràng buộc: bắt buộc citation, fail-closed ACL, và 'không đủ bằng chứng thì không trả lời' (has_evidence=False)"
+  "task": "Vòng 8: LLM Staging/Mock Adapter & Guardrails. Ràng buộc: LLM_MODE in ('mock', 'staging') cấm production; ACL lọc trước prompt; Citation Post-Validation chống bịa nguồn; 'không đủ bằng chứng thì từ chối' (has_evidence=False); Kháng prompt injection; Regression tests đầy đủ."
 }
