@@ -3,6 +3,11 @@ Membership lookup service for server-side project authorization.
 Zero trust on frontend claims. Only trusted sources determine project access.
 """
 from typing import Protocol, Set, Dict, Optional, runtime_checkable
+import logging
+
+from titsmart_ai.adapters.supabase_adapter import ReadOnlyDataClient
+
+logger = logging.getLogger(__name__)
 
 
 @runtime_checkable
@@ -34,3 +39,29 @@ class InMemoryProjectMembershipProvider:
 
     def set_user_projects(self, user_id: str, projects: Set[str]) -> None:
         self._mapping[user_id] = set(projects)
+
+
+class SupabaseProjectMembershipProvider:
+    """
+    Adapter tra cứu bảng project_members thực tế từ Supabase qua ReadOnlyDataClient:
+    - Thực hiện query: select_project_members(user_id)
+    - Bảo đảm an toàn fail-closed: lỗi mạng hoặc không tìm thấy user -> trả về set() rỗng.
+    """
+    def __init__(self, client: ReadOnlyDataClient):
+        self._client = client
+
+    def get_allowed_projects(self, user_id: str) -> Set[str]:
+        if not user_id or not user_id.strip():
+            return set()
+
+        try:
+            # Tra cứu từ bảng project_members qua protocol client
+            rows = self._client.select_project_members(user_id=user_id.strip())
+            if not rows:
+                return set()
+
+            return {str(r.get("project_code")) for r in rows if r.get("project_code")}
+        except Exception as e:
+            logger.error(f"Lỗi khi tra cứu project_members cho user {user_id}: {e}")
+            # Fail-closed: Khi database gặp sự cố, tuyệt đối không cấp quyền bừa bãi
+            return set()

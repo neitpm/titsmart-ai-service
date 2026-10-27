@@ -61,6 +61,13 @@ class FakeReadOnlyClient:
             res = [i for i in res if (i.status or "").upper() == status.upper()]
         return res
 
+    def select_project_members(self, user_id: str):
+        if self.simulate_timeout:
+            raise DatabaseQueryError("Truy vấn bảng project_members bị quá thời gian (10.0s)")
+        if self.simulate_error:
+            raise DatabaseQueryError("Lỗi kết nối database giả lập (HTTP 403 Forbidden)")
+        return getattr(self, "project_members", {}).get(user_id, [])
+
 
 @pytest.fixture
 def fake_data():

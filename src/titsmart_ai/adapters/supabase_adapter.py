@@ -84,6 +84,9 @@ class ReadOnlyDataClient(Protocol):
     ) -> List[Issue]:
         ...
 
+    def select_project_members(self, user_id: str) -> List[Dict[str, Any]]:
+        ...
+
 
 class SupabaseReadOnlyClient:
     """
@@ -154,3 +157,15 @@ class SupabaseReadOnlyClient:
         except Exception as e:
             logger.error("Lỗi khi truy vấn bảng issues")
             raise DatabaseQueryError(f"Không thể truy vấn danh sách sự cố: {str(e)}") from e
+
+    def select_project_members(self, user_id: str) -> List[Dict[str, Any]]:
+        try:
+            res = self._client.table("project_members").select("*").eq("user_id", user_id).execute()
+            data = res.data or []
+            return [normalize_record_keys(row) for row in data]
+        except TimeoutError as e:
+            logger.error("Hết thời gian chờ (Timeout) khi truy vấn bảng project_members")
+            raise DatabaseQueryError(f"Truy vấn bảng project_members bị quá thời gian ({self._timeout}s)") from e
+        except Exception as e:
+            logger.error("Lỗi khi truy vấn bảng project_members")
+            raise DatabaseQueryError(f"Không thể truy vấn danh sách thành viên dự án: {str(e)}") from e

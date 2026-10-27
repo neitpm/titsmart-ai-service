@@ -69,7 +69,21 @@ def get_auth_context(
         token = authorization.split("Bearer ", 1)[1].strip()
         jwt_secret = settings.JWT_SECRET_KEY or "titsmart_offline_dev_secret_key_32chars"
         try:
-            payload = jwt.decode(token, jwt_secret, algorithms=[settings.JWT_ALGORITHM])
+            decode_options = {
+                "require": ["exp", "sub"],
+                "verify_exp": True,
+                "verify_sub": True,
+            }
+            decode_kwargs = {
+                "algorithms": [settings.JWT_ALGORITHM],
+                "options": decode_options,
+            }
+            if settings.JWT_ISSUER:
+                decode_kwargs["issuer"] = settings.JWT_ISSUER
+            if settings.JWT_AUDIENCE:
+                decode_kwargs["audience"] = settings.JWT_AUDIENCE
+
+            payload = jwt.decode(token, jwt_secret, **decode_kwargs)
             user_id = str(payload.get("sub") or payload.get("user_id") or "")
             if not user_id:
                 raise HTTPException(

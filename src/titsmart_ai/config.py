@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     INTERNAL_AUTH_SECRET: Optional[str] = None  # Secret cho reverse proxy khi chạy mock mode
     JWT_SECRET_KEY: Optional[str] = None
     JWT_ALGORITHM: str = "HS256"
+    JWT_ISSUER: Optional[str] = None  # Ví dụ: "https://<ref>.supabase.co/auth/v1"
+    JWT_AUDIENCE: Optional[str] = "authenticated"  # Supabase default role/audience
 
     model_config = SettingsConfigDict(
         env_file=".env",

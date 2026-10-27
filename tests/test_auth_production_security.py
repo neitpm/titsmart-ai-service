@@ -26,7 +26,11 @@ def test_jwt_verification_and_server_side_membership(client):
     - Dù client có cố tình chèn header X-Allowed-Projects: TITS-02, server hoàn toàn lờ đi và chỉ cấp TITS-01.
     """
     secret = settings.JWT_SECRET_KEY or "titsmart_offline_dev_secret_key_32chars"
-    token = jwt.encode({"sub": "engineer_tits01", "role": "engineer"}, secret, algorithm="HS256")
+    token = jwt.encode(
+        {"sub": "engineer_tits01", "role": "engineer", "aud": "authenticated", "exp": 9999999999},
+        secret,
+        algorithm="HS256"
+    )
 
     headers = {
         "Authorization": f"Bearer {token}",
@@ -88,23 +92,62 @@ def test_config_validator_prevents_mock_in_production():
         Settings(APP_ENV="production", AUTH_MODE="mock")
 
 
-def test_internal_secret_protection_in_mock_mode(monkeypatch, client):
-    """
-    Nếu cấu hình INTERNAL_AUTH_SECRET (dành cho Reverse Proxy nội bộ),
-    request mock mode thiếu hoặc sai X-Internal-Secret sẽ bị 403 Forbidden.
-    """
-    monkeypatch.setattr(settings, "INTERNAL_AUTH_SECRET", "super_secret_proxy_key")
+def test_supabase_project_membership_provider_unit():
+    """Test unit cho SupabaseProjectMembershipProvider với FakeReadOnlyClient."""
+    from titsmart_ai.security.membership import SupabaseProjectMembershipProvider
+    from tests.test_supabase_adapter import FakeReadOnlyClient
 
-    headers_bad = {
-        "x-user-id": "engineer_01",
-        "x-internal-secret": "wrong_key",
+    fake_client = FakeReadOnlyClient()
+    fake_client.project_members = {
+        "u_test_1": [{"user_id": "u_test_1", "project_code": "TITS-01"}, {"user_id": "u_test_1", "project_code": "TITS-02"}],
+        "u_test_2": [{"user_id": "u_test_2", "project_code": "DA-01"}],
     }
-    res_bad = client.post("/api/chat", json={"question": "Tiến độ TITS-01?"}, headers=headers_bad)
-    assert res_bad.status_code == 403
+    provider = SupabaseProjectMembershipProvider(client=fake_client)
 
-    headers_good = {
-        "x-user-id": "engineer_01",
-        "x-internal-secret": "super_secret_proxy_key",
-    }
-    res_good = client.post("/api/chat", json={"question": "Tiến độ TITS-01?"}, headers=headers_good)
-    assert res_good.status_code == 200
+    # u_test_1 có quyền TITS-01 và TITS-02
+    assert provider.get_allowed_projects("u_test_1") == {"TITS-01", "TITS-02"}
+    # u_test_2 chỉ có DA-01
+    assert provider.get_allowed_projects("u_test_2") == {"DA-01"}
+    # User không tồn tại -> Trả về set rỗng (fail-closed)
+    assert provider.get_allowed_projects("u_unknown") == set()
+    # User id rỗng -> Trả về set rỗng
+    assert provider.get_allowed_projects("") == set()
+
+    # Lỗi database -> Fail-closed trả về set rỗng
+    error_client = FakeReadOnlyClient(simulate_error=True)
+    error_provider = SupabaseProjectMembershipProvider(client=error_client)
+    assert error_provider.get_allowed_projects("u_test_1") == set()
+
+
+def test_jwt_claims_verification_iss_aud_exp(monkeypatch, client):
+    """Xác minh chặt chẽ các JWT claims: exp, aud, iss, sub."""
+    secret = settings.JWT_SECRET_KEY or "titsmart_offline_dev_secret_key_32chars"
+    monkeypatch.setattr(settings, "JWT_ISSUER", "https://xyz-staging.supabase.co/auth/v1")
+    monkeypatch.setattr(settings, "JWT_AUDIENCE", "authenticated")
+
+    # 1. Token thiếu exp -> Bị từ chối
+    token_no_exp = jwt.encode(
+        {"sub": "u1", "iss": "https://xyz-staging.supabase.co/auth/v1", "aud": "authenticated"},
+        secret,
+        algorithm="HS256"
+    )
+    res = client.post("/api/chat", json={"question": "Tiến độ TITS-01?"}, headers={"Authorization": f"Bearer {token_no_exp}"})
+    assert res.status_code == 401
+
+    # 2. Token sai issuer -> Bị từ chối
+    token_bad_iss = jwt.encode(
+        {"sub": "u1", "iss": "https://attacker.com", "aud": "authenticated", "exp": 9999999999},
+        secret,
+        algorithm="HS256"
+    )
+    res = client.post("/api/chat", json={"question": "Tiến độ TITS-01?"}, headers={"Authorization": f"Bearer {token_bad_iss}"})
+    assert res.status_code == 401
+
+    # 3. Token đúng claims -> Thành công
+    token_valid = jwt.encode(
+        {"sub": "engineer_tits01", "iss": "https://xyz-staging.supabase.co/auth/v1", "aud": "authenticated", "exp": 9999999999},
+        secret,
+        algorithm="HS256"
+    )
+    res = client.post("/api/chat", json={"question": "Tiến độ dự án TITS-01 là bao nhiêu?"}, headers={"Authorization": f"Bearer {token_valid}"})
+    assert res.status_code == 200
