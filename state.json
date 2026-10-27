@@ -4,5 +4,5 @@
   "max_iterations": 10,
   "state": "CODING",
   "next_actor": "ANTIGRAVITY",
-  "task": "Vòng 8: LLM Staging/Mock Adapter & Guardrails. Ràng buộc: LLM_MODE in ('mock', 'staging') cấm production; ACL lọc trước prompt; Citation Post-Validation chống bịa nguồn; 'không đủ bằng chứng thì từ chối' (has_evidence=False); Kháng prompt injection; Regression tests đầy đủ."
+  "task": "Vòng 8: Tích hợp Ollama Local (qwen3:8b sinh câu trả lời, fallback qwen3:4b, bge-m3:latest cho embedding). Ràng buộc: LLM_MODE in ('mock', 'staging'); FakeOllamaClient cho unit test offline; ACL lọc trước prompt; Citation Post-Validation; Kháng prompt injection; Timeout và fail-closed; Cập nhật .env.example và README."
 }
