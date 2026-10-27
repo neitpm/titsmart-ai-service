@@ -1,0 +1,20 @@
+[
+  {
+    "id": "iss-001",
+    "project_code": "GIAM_SAT_CONG_TRINH_CC1",
+    "title": "Chưa có mặt bằng thi công trạm biến áp",
+    "description": "Chủ đầu tư chưa bàn giao tim mốc và mặt bằng khu vực trạm biến áp nên đội thi công chưa thể đào móng kéo cáp ngầm.",
+    "priority": "CRITICAL",
+    "status": "OPEN",
+    "reported_time": "2026-10-20T08:30:00Z"
+  },
+  {
+    "id": "iss-002",
+    "project_code": "GIAM_SAT_CONG_TRINH_CC1",
+    "title": "Vật tư cáp điện chậm giao",
+    "description": "Nhà cung cấp báo dời lịch giao lô cáp Cu/XLPE/PVC 3x240mm2 sang tuần sau do kẹt vận chuyển.",
+    "priority": "WARNING",
+    "status": "PROCESSING",
+    "reported_time": "2026-10-22T14:15:00Z"
+  }
+]

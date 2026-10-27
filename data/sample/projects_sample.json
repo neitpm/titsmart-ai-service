@@ -1,0 +1,112 @@
+[
+  {
+    "id": "900d27ed-b9a0-4958-92ce-8671fd014bcd",
+    "code": "GIAM_SAT_CONG_TRINH_CC1",
+    "name": "Giám sát công trình CC1",
+    "client": "[Chủ đầu tư - Đã ẩn]",
+    "location": "Việt Nam",
+    "status": "active",
+    "progress_percent": 0,
+    "contract_value": 0,
+    "created_at": "2026-09-01T03:02:01.72182+00:00"
+  },
+  {
+    "id": "659aa583-77cf-4a3e-9e7d-15363a4b81ca",
+    "code": "HD_26_MAN_YEALINK_DL_TAY_NINH",
+    "name": "HĐ 26 màn Yealink - ĐL Tây Ninh",
+    "client": "[Chủ đầu tư - Đã ẩn]",
+    "location": "Tây Ninh",
+    "status": "active",
+    "progress_percent": 0,
+    "contract_value": 0,
+    "created_at": "2026-10-24T03:48:17.239+00:00"
+  },
+  {
+    "id": "3f84b870-769d-4e44-a041-8ccf557ec20a",
+    "code": "TRAM_BIEN_AP_110KV_PHUOC_DONG_6",
+    "name": "Trạm biến áp 110kV Phước Đông 6",
+    "client": null,
+    "location": "Việt Nam",
+    "status": "active",
+    "progress_percent": 0,
+    "contract_value": 0,
+    "created_at": "2026-09-07T09:08:59.810358+00:00"
+  },
+  {
+    "id": "47f3ebfe-ff9d-42f9-827b-38429e493cec",
+    "code": "TRAM_BIEN_AP_110KV_PHUOC_TAN",
+    "name": "Trạm biến áp 110kV Phước Tân",
+    "client": null,
+    "location": "Việt Nam",
+    "status": "active",
+    "progress_percent": 0,
+    "contract_value": 0,
+    "created_at": "2026-09-14T08:00:24.714475+00:00"
+  },
+  {
+    "id": "d5872784-da6e-4972-a2cf-de9e567384c6",
+    "code": "LU_DOAN_CONG_BINH_25_BIEN_HOA",
+    "name": "Lữ đoàn Công Binh 25, Biên Hòa",
+    "client": null,
+    "location": "Biên Hòa",
+    "status": "active",
+    "progress_percent": 0,
+    "contract_value": 0,
+    "created_at": "2026-10-17T06:31:31.89+00:00"
+  },
+  {
+    "id": "0ca16664-df0b-4252-894d-c5c269cf0ee7",
+    "code": "PHAN_MEM_CONG_TY",
+    "name": "Phần mềm công ty",
+    "client": null,
+    "location": "Việt Nam",
+    "status": "active",
+    "progress_percent": 0,
+    "contract_value": 0,
+    "created_at": "2026-10-16T03:44:55.48+00:00"
+  },
+  {
+    "id": "9d7f2c06-8d98-47df-899f-282216be4880",
+    "code": "IN_0001",
+    "name": "Cung cấp máy tính công ty Điện lực Tây Ninh",
+    "client": "[Chủ đầu tư - Đã ẩn]",
+    "location": "Phường Tây Ninh, Tỉnh Tây Ninh",
+    "status": "active",
+    "progress_percent": 0,
+    "contract_value": 0,
+    "created_at": "2026-09-26T15:31:10.209789+00:00"
+  },
+  {
+    "id": "8e7e50f1-76e4-465b-90a3-2d026369a4e3",
+    "code": "TRAM_BIEN_AP_500KV_BAC_NINH",
+    "name": "Trạm biến áp 500kV Bắc Ninh",
+    "client": null,
+    "location": "Việt Nam",
+    "status": "active",
+    "progress_percent": 0,
+    "contract_value": 0,
+    "created_at": "2026-08-21T05:09:28.152079+00:00"
+  },
+  {
+    "id": "1ed35ccf-24de-45c2-8f16-71ec69348f77",
+    "code": "TBA_500KV_CU_CHI_VA_CAC_DUONG_DAY_DAU_NO",
+    "name": "TBA 500kV Củ Chi và các đường dây đầu nối",
+    "client": null,
+    "location": "Củ Chi",
+    "status": "active",
+    "progress_percent": 0,
+    "contract_value": 0,
+    "created_at": "2026-10-17T08:45:01.741+00:00"
+  },
+  {
+    "id": "8d84d99b-939d-4250-8217-b5dfb0e8fec1",
+    "code": "GOI_OCC_THUY_DIEN",
+    "name": "Gói OCC Thuỷ điện",
+    "client": null,
+    "location": "Việt Nam",
+    "status": "active",
+    "progress_percent": 0,
+    "contract_value": 0,
+    "created_at": "2026-10-16T03:18:38.389+00:00"
+  }
+]
