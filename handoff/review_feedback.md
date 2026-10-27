@@ -1,15 +1,31 @@
-# Review Feedback — Vòng 5: QueryRouter
+# Review Feedback — Vòng 6
 
-## Kết quả
+## Kết quả: PASSED
 
-`python -m pytest tests -q`: **105 passed, 1 skipped**.
+Đã review độc lập `PROJECT_CONTEXT.md`, `state.json`, `handoff/coder_report.md`, git diff, mã nguồn liên quan và các regression test.
 
-## Trạng thái: PASSED
+### 1. AuthContext fail-closed — ĐẠT
 
-Đã kiểm tra `PROJECT_CONTEXT.md`, `state.json`, `handoff/coder_report.md`, git diff và implementation trong `src/titsmart_ai/router/query_router.py`.
+- `get_auth_context` không còn default cho `X-User-Id` hoặc `X-Allowed-Projects`.
+- Thiếu hoặc chỉ chứa whitespace ở `X-User-Id` trả HTTP 401.
+- Thiếu/rỗng `X-Allowed-Projects` tạo `allowed_project_codes=set()`; `ChatEngine` từ chối xử lý và không trả evidence.
+- Regression test `test_api_chat_rejects_missing_auth_headers` và `test_api_chat_empty_allowed_projects_header` xác nhận hành vi này.
 
-- Prefix collision đã được xử lý bằng regex boundary, không còn substring matching.
-- Trường hợp chỉ có quyền `TITS-01` nhưng câu hỏi chứa `TITS-010` được nhận diện là mã ngoài quyền và bị từ chối fail-closed.
-- Candidate được sắp xếp theo độ dài giảm dần, bảo đảm longest-match và tính tất định khi câu hỏi có nhiều mã.
-- Regression tests tương ứng đã có và toàn bộ test suite đạt.
+### 2. SQL aggregate được giới hạn theo ACL — ĐẠT
 
+- Nhánh aggregate không còn gọi summary toàn cục không có bộ lọc.
+- `ChatEngine._handle_sql_intent` lặp qua `sorted(auth_context.allowed_project_codes)` và gọi `get_progress_summary(project_code=p_code)` cho từng project được cấp quyền.
+- Tổng task/chỉ số chỉ được cộng từ summary đã lọc; citation cũng gắn với project cụ thể (`progress_summary_<project>`), không còn source `all_allowed`.
+- Regression test `test_chat_engine_sql_aggregate_acl_isolation` xác nhận user chỉ có `TITS-01` không nhận dữ liệu/citation của `TITS-02`.
+
+### Kiểm thử
+
+Lệnh đã chạy: `python -m pytest tests -q`
+
+Kết quả: **119 passed, 1 skipped**.
+
+Không phát hiện lỗi còn tồn tại trong phạm vi review Vòng 6.
+
+## Handoff
+
+`state.json` được cập nhật: `state=PASSED`, `next_actor=ANTIGRAVITY`.

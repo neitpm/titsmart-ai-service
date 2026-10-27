@@ -107,8 +107,8 @@ class QueryRouter:
         if matches:
             return matches[0]
 
-        # 3. Kiểm tra tiền tố viết tắt: "DA 1", "DỰ ÁN 1", "DA-01"
-        match_da = re.search(r"(?:dự án|du an|da)\s+([A-Za-z0-9_-]+)", text, re.IGNORECASE)
+        # 3. Kiểm tra tiền tố viết tắt: "DA 1", "DỰ ÁN 1", "DA-01" (yêu cầu bắt đầu bằng chữ số hoặc gạch nối)
+        match_da = re.search(r"\b(?:dự án|du an|da)\s+([0-9][A-Za-z0-9_-]*|[A-Z]{2,}[-_][A-Za-z0-9_-]+)\b", text, re.IGNORECASE)
         if match_da:
             return match_da.group(1).upper()
 
