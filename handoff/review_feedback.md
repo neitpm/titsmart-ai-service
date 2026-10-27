@@ -1,18 +1,16 @@
-# Review Feedback (Iteration 5 - Final)
+# Review Feedback (Round 2 - Final)
 
 **Status**: [ĐẠT]
 **Decision**: PASSED
 **Actor**: CODEX
 
 ### Evaluation:
-- 12/12 tests pass.
-- Đã kiểm kê đầy đủ file untracked.
-- Đã kiểm tra refresh=true và cơ chế cache update.
-- API tương thích ngược cả List[T] và LoadResult[T].
-- Schema drift và numeric validation chặn chẽ.
-- Không đọc secret, không kết nối production.
-- Đạt tiêu chuẩn hoàn thành DoD Vòng 1.
+- DataQueryTool protocol & InMemoryDataQueryTool đạt 100% yêu cầu read-only, không raw SQL.
+- Bằng chứng progress contract đã được xác thực trực tiếp từ web-admin (`progress` tỷ lệ 0.0-1.0 chuẩn hóa thành 0-100%).
+- 29/29 tests pass.
+- Đã giải quyết triệt để vấn đề immutability (deep copy) và không nuốt lỗi số học trong `round_float`.
+- Hoàn thành đầy đủ DoD Vòng 2.
 
 ### Next Steps:
-1. Đóng Vòng 1 và tạo initial commit.
-2. Thiết kế module Vòng 2: SQL read-only tools.
+1. Commit mã nguồn Vòng 2.
+2. Chuẩn bị bước vào Vòng 3: Adapter Supabase Staging read-only (tương thích protocol DataQueryTool).

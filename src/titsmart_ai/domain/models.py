@@ -58,6 +58,8 @@ class Task(BaseDataModel):
     name: str
     volume: Optional[float] = Field(default=0.0, ge=0.0)
     unit: Optional[str] = None
+    # Chuẩn hóa duy nhất: progress luôn là phần trăm từ 0.0 đến 100.0%.
+    # Quy tắc ingestion rõ ràng: nếu giá trị nguồn là tỷ lệ 0.0 < val <= 1.0, tự động chuẩn hóa sang % (val * 100).
     progress: Optional[float] = Field(default=0.0, ge=0.0, le=100.0)
     status: Optional[str] = None
     purchase_status: Optional[str] = None
@@ -65,10 +67,18 @@ class Task(BaseDataModel):
     notes: Optional[str] = None
     assigned_engineer_name: Optional[str] = None
 
-    @field_validator("volume", "progress", mode="before")
+    @field_validator("volume", mode="before")
     @classmethod
-    def check_finite(cls, v):
+    def check_volume(cls, v):
         return validate_finite_number(v)
+
+    @field_validator("progress", mode="before")
+    @classmethod
+    def normalize_progress(cls, v):
+        v = validate_finite_number(v)
+        if v is not None and 0.0 < v <= 1.0:
+            v = v * 100.0
+        return v
 
     @field_validator("stt", mode="before")
     @classmethod
