@@ -188,3 +188,112 @@ class InMemoryDataQueryTool:
             issues = [i for i in issues if (i.status or "").upper() == status.upper()]
 
         return issues
+
+
+class SupabaseDataQueryTool:
+    """
+    Hiện thực DataQueryTool kết nối với cơ sở dữ liệu Supabase Staging.
+    - Nhận client thông qua Dependency Injection (ReadOnlyDataClient protocol).
+    - 100% tuân thủ DataQueryTool protocol.
+    - Không nhận raw SQL, chỉ gọi phương thức an toàn của client.
+    - Tính toán tất định (deterministic), không suy đoán dữ liệu thiếu.
+    """
+
+    def __init__(self, client: Any):
+        self._client = client
+
+    def get_project_summary(self, project_code: str) -> Optional[Dict[str, Any]]:
+        if not project_code:
+            return None
+
+        projects = self._client.select_projects(project_code=project_code)
+        if not projects:
+            return None
+        project = projects[0]
+
+        proj_tasks = self._client.select_tasks(project_code=project_code)
+        proj_issues = self._client.select_issues(project_code=project_code)
+
+        total_tasks = len(proj_tasks)
+        total_volume = sum((t.volume or 0.0) for t in proj_tasks)
+        total_volume = round_float(total_volume, 2)
+
+        if total_tasks > 0:
+            progress_sum = sum((t.progress or 0.0) for t in proj_tasks)
+            avg_progress = round_float(progress_sum / total_tasks, 2)
+        else:
+            avg_progress = round_float(project.progress_percent or 0.0, 2)
+
+        return {
+            "project_code": project.code,
+            "project_name": project.name,
+            "status": project.status,
+            "total_tasks": total_tasks,
+            "average_progress": avg_progress,
+            "total_issues": len(proj_issues),
+            "total_volume": total_volume,
+            "contract_value": project.contract_value or 0.0,
+        }
+
+    def find_delayed_tasks(
+        self, project_code: Optional[str] = None, threshold: float = 100.0
+    ) -> List[Task]:
+        if threshold < 0.0 or threshold > 100.0:
+            raise ValueError(f"Ngưỡng tiến độ (threshold) phải nằm trong khoảng [0.0, 100.0], nhận: {threshold}")
+
+        tasks = self._client.select_tasks(project_code=project_code)
+        return [t.model_copy(deep=True) for t in tasks if (t.progress or 0.0) < threshold]
+
+    def get_progress_summary(
+        self, project_code: Optional[str] = None
+    ) -> Dict[str, Any]:
+        tasks = self._client.select_tasks(project_code=project_code)
+
+        total = len(tasks)
+        if total == 0:
+            return {
+                "project_code": project_code,
+                "total_tasks": 0,
+                "completed_tasks": 0,
+                "in_progress_tasks": 0,
+                "not_started_tasks": 0,
+                "overall_completion_rate": 0.0,
+            }
+
+        completed = 0
+        in_progress = 0
+        not_started = 0
+        total_progress = 0.0
+
+        for t in tasks:
+            pct = t.progress or 0.0
+            total_progress += pct
+
+            if pct >= 100.0 or (t.status and "hoàn thành" in t.status.lower()):
+                completed += 1
+            elif pct > 0.0 or (t.status and "đang" in t.status.lower()):
+                in_progress += 1
+            else:
+                not_started += 1
+
+        overall_rate = round_float(total_progress / total, 2)
+
+        return {
+            "project_code": project_code,
+            "total_tasks": total,
+            "completed_tasks": completed,
+            "in_progress_tasks": in_progress,
+            "not_started_tasks": not_started,
+            "overall_completion_rate": overall_rate,
+        }
+
+    def find_issues(
+        self,
+        project_code: Optional[str] = None,
+        priority: Optional[str] = None,
+        status: Optional[str] = None,
+    ) -> List[Issue]:
+        issues = self._client.select_issues(
+            project_code=project_code, priority=priority, status=status
+        )
+        return [i.model_copy(deep=True) for i in issues]

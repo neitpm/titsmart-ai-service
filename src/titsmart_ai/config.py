@@ -1,32 +1,76 @@
 import os
 from pathlib import Path
+from typing import Optional, Set
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator, ValidationInfo
 
 
 class Settings(BaseSettings):
     """
     Cấu hình ứng dụng titsmart-ai-service.
-    Mặc định chỉ dùng mock data offline, không kết nối production.
+    Tuân thủ an toàn:
+    - SUPABASE_ENV chỉ chấp nhận 'staging' hoặc 'development'.
+    - SUPABASE_ALLOWED_PROJECT_REF: Allowlist bắt buộc ref project staging.
+    - Không log secret/token.
     """
     APP_NAME: str = "TITSmart AI Service"
     APP_ENV: str = "development"
     DEBUG: bool = True
     PORT: int = 8000
 
-    # Đường dẫn thư mục dữ liệu mẫu
+    # Đường dẫn thư mục dữ liệu mẫu offline
     BASE_DIR: Path = Path(__file__).resolve().parent.parent.parent
     SAMPLE_DATA_DIR: Path = BASE_DIR / "data" / "sample"
 
-    # Supabase (Mặc định trống - không tự kết nối khi test local)
-    SUPABASE_URL: str = ""
-    SUPABASE_KEY: str = ""
-    SUPABASE_READONLY: bool = True
+    # Supabase Staging Settings
+    SUPABASE_ENV: str = "development"  # Chỉ chấp nhận 'development' hoặc 'staging'
+    SUPABASE_ALLOWED_PROJECT_REF: Optional[str] = None  # Allowlist ref (ví dụ: 'xyz-staging-123')
+    SUPABASE_URL: Optional[str] = None
+    SUPABASE_ANON_KEY: Optional[str] = None
+    SUPABASE_REQUEST_TIMEOUT: float = 10.0  # Timeout giây
 
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore"
     )
+
+    @field_validator("SUPABASE_ENV")
+    @classmethod
+    def check_env_not_production(cls, v: str) -> str:
+        if v.lower() in ("production", "prod"):
+            raise ValueError("Tuyệt đối không được cấu hình SUPABASE_ENV=production!")
+        return v.lower()
+
+    @field_validator("SUPABASE_URL", mode="after")
+    @classmethod
+    def check_url_allowlist(cls, v: Optional[str], info: ValidationInfo) -> Optional[str]:
+        if not v:
+            return None
+
+        # Phân tích URL chính xác bằng urllib.parse
+        from urllib.parse import urlparse
+        parsed = urlparse(v)
+        hostname = (parsed.hostname or "").lower()
+
+        # Kiểm tra allowlist project ref chính xác trên hostname: <allowed-ref>.supabase.co
+        allowed_ref = info.data.get("SUPABASE_ALLOWED_PROJECT_REF")
+        if allowed_ref:
+            expected_host = f"{allowed_ref.lower()}.supabase.co"
+            if hostname != expected_host and not hostname.endswith(f".{expected_host}"):
+                raise ValueError(
+                    f"SUPABASE_URL có hostname '{hostname}' không khớp với allowlist chính xác ('{expected_host}')!"
+                )
+        return v
+
+    def validate_staging_credentials(self) -> None:
+        """Kiểm tra có đủ credentials staging và allowlist khi kích hoạt Supabase adapter."""
+        if not self.SUPABASE_URL or not self.SUPABASE_ANON_KEY:
+            raise ValueError(
+                "Thiếu cấu hình Supabase Staging: SUPABASE_URL và SUPABASE_ANON_KEY bắt buộc phải được khai báo."
+            )
+        if self.SUPABASE_ENV not in ("staging", "development"):
+            raise ValueError(f"Môi trường không an toàn: {self.SUPABASE_ENV}. Chỉ chấp nhận 'staging' hoặc 'development'.")
 
 
 settings = Settings()
