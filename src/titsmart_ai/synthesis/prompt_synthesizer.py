@@ -168,25 +168,32 @@ class PromptSynthesizer:
         if intent in (QueryIntent.VECTOR_SEARCH, QueryIntent.HYBRID):
             vector_context = self.format_vector_context(vector_results)
 
+        # Bảo vệ Prompt Injection & Secret Scrubbing (Fail-Closed)
+        # Sanitization cho các nguồn ngữ cảnh không tin cậy
+        from titsmart_ai.llm.guardrails import LLMGuardrails
+        clean_user_prompt = LLMGuardrails.sanitize_untrusted_context(question.strip())
+        clean_sql_context = LLMGuardrails.sanitize_untrusted_context(sql_context) if sql_context else ""
+        clean_vector_context = LLMGuardrails.sanitize_untrusted_context(vector_context) if vector_context else ""
+
         prompt_blocks: List[str] = [
             "### SYSTEM INSTRUCTIONS ###",
             system_prompt,
             "\n### RETRIEVED CONTEXT ###",
         ]
 
-        if sql_context:
+        if clean_sql_context:
             prompt_blocks.append("[KHỐI DỮ LIỆU SỐ LIỆU & TIẾN ĐỘ THI CÔNG (SQL)]:")
-            prompt_blocks.append(sql_context)
+            prompt_blocks.append(clean_sql_context)
 
-        if vector_context:
+        if clean_vector_context:
             prompt_blocks.append("\n[KHỐI DỮ LIỆU NHẬT KÝ & HỒ SƠ SỰ CỐ HIỆN TRƯỜNG (VECTOR RAG)]:")
-            prompt_blocks.append(vector_context)
+            prompt_blocks.append(clean_vector_context)
 
-        if not sql_context and not vector_context:
+        if not clean_sql_context and not clean_vector_context:
             prompt_blocks.append("Không có dữ liệu nào được trích xuất từ hệ thống.")
 
         prompt_blocks.append("\n### USER QUESTION ###")
-        prompt_blocks.append(f"Câu hỏi: {question.strip()}")
+        prompt_blocks.append(f"Câu hỏi: {clean_user_prompt}")
         prompt_blocks.append(
             "\nHãy trả lời câu hỏi trên theo đúng chuẩn văn phong kỹ thuật, tuân thủ nghiêm ngặt dữ liệu trong CONTEXT và kèm trích dẫn nguồn."
         )
@@ -207,9 +214,9 @@ class PromptSynthesizer:
 
         return SynthesizedPrompt(
             system_prompt=system_prompt,
-            user_prompt=question.strip(),
-            sql_context=sql_context,
-            vector_context=vector_context,
+            user_prompt=clean_user_prompt,
+            sql_context=clean_sql_context,
+            vector_context=clean_vector_context,
             full_prompt=full_prompt,
             token_estimate=token_estimate,
             intent=intent,

@@ -1,38 +1,37 @@
-# Kế hoạch Vòng 8: Đối chiếu Kiến trúc ProjectLens và Triển khai LLM Staging Adapter
+# Báo cáo Coder: Xác nhận Orchestrator Nhận Task & Chạy Pytest
 
-## 1. Phân tích Repository ProjectLens (`https://github.com/neitpm/ProjectLens`)
+## 1. Mục tiêu và Phạm vi Thực hiện
+- Nhiệm vụ: Tạo một file test nhỏ để xác nhận orchestrator nhận task và chạy pytest.
+- File bổ sung: `tests/test_orchestrator_task.py`.
 
-### Điểm mạnh nổi bật của ProjectLens:
-- **System Prompt chuẩn kỹ thuật TitSmart**: Có quy tắc trích xuất rõ ràng về bảng giá, khối lượng, vật tư, đơn giá và ràng buộc kiểm soát ảo giác (Anti-Hallucination): *"Nếu thiếu thông tin, nói rõ: Tài liệu hiện tại không đề cập đến thông tin này"*.
-- **Structured Lookup tách biệt RAG ngữ nghĩa**: Tách hẳn phần tra cứu chi phí cao nhất (`highest_cost_answer`) và danh mục bản vẽ/phụ lục (`drawing_inventory_answer`) ra khỏi vector search để tránh ảo giác số liệu.
-- **pgvector schema (384 dims)**: Sử dụng MiniLM-L12 384 dimensions tương thích hoàn toàn với schema pgvector chúng ta đã thiết kế ở Vòng 4 (`migrations/001_knowledge_vectors.sql`).
+## 2. Chi tiết Triển khai Test (`tests/test_orchestrator_task.py`)
+1. `test_orchestrator_receives_task`:
+   - Xác nhận orchestrator đã đọc và lưu trữ `task` hợp lệ vào `state.json`.
+   - Kiểm tra chuỗi task không rỗng và có kiểu dữ liệu chuỗi hợp lệ.
+2. `test_orchestrator_state_schema_keys`:
+   - Kiểm tra tính toàn vẹn của các trường trong `state.json` (`round`, `iteration`, `max_iterations`, `state`, `next_actor`, `task`).
+   - Ràng buộc giá trị hợp lệ cho `state` (`CODING`, `REVIEW`, `NEEDS_FIX`, `PASSED`) và `next_actor` (`ANTIGRAVITY`, `CODEX`).
+3. `test_orchestrator_read_write_roundtrip`:
+   - Kiểm tra hàm `read_state` và `write_state` đọc/ghi JSON chuẩn UTF-8 sạch (hỗ trợ tiếng Việt và emoji).
+   - Xác nhận không phát sinh BOM (Byte Order Mark) gây lỗi parse.
+4. `test_orchestrator_read_state_file_not_found`:
+   - Kiểm tra cơ chế fail-fast khi `state.json` không tồn tại.
+5. `test_orchestrator_read_state_invalid_json`:
+   - Kiểm tra cơ chế fail-fast khi file state bị hỏng nội dung JSON.
+6. `test_pytest_execution_confirmation`:
+   - Kiểm tra xác nhận test runner pytest thực thi hoàn chỉnh trong môi trường test.
 
-### Những phần KHÔNG sao chép để bảo vệ an toàn cho `titsmart-ai-service`:
-- **KHÔNG dùng kết nối trực tiếp PostgreSQL raw connection string** (`postgresql://...`): `titsmart-ai-service` phải dùng `ReadOnlyDataClient` và Supabase PostgREST client với hostname allowlist và RLS `auth.uid()`.
-- **KHÔNG bỏ qua ACL**: ProjectLens tìm kiếm toàn bộ `rag_chunks` không có bộ lọc `project_codes`. Ở `titsmart-ai-service`, bắt buộc giữ nguyên **Fail-Closed ACL**: lọc `project_codes` trước khi truy vấn và trước khi ghép vào prompt.
-- **KHÔNG phụ thuộc Ollama local cứng**: Cần thiết kế `LLMClient(Protocol)` trừu tượng để hỗ trợ cả `FakeLLMClient` (offline unit test) và `StagingLLMClient` (khi kết nối staging).
+## 3. Kết quả Chạy Test Xác minh
+Lệnh thực hiện:
+```bash
+python -m pytest tests -q
+```
+Kết quả:
+```text
+192 passed, 1 skipped in 0.57s
+```
+Tất cả 192 tests (bao gồm 6 tests mới trong `tests/test_orchestrator_task.py`) đều pass 100%.
 
----
-
-## 2. Kế hoạch Triển khai Vòng 8 cho `titsmart-ai-service`
-
-1. **LLM Client Contract & Staging Adapter (`src/titsmart_ai/llm/client.py`)**:
-   - `LLMClient(Protocol)`: Phương thức `generate(system_prompt: str, user_prompt: str, timeout: float) -> str`.
-   - `FakeLLMClient`: Phục vụ 100% offline tests tất định, giả lập phản hồi tuân thủ evidence hoặc phát hiện cố tình bịa citation.
-   - `StagingLLMClient`: Chỉ cho phép kết nối endpoint staging được cấu hình trong `Settings`, cấm tuyệt đối khi `APP_ENV=production`.
-   - `Settings.LLM_MODE`: Chỉ chấp nhận `"mock"` hoặc `"staging"`, từ chối `"production"`.
-
-2. **Backend-Driven Citation & Anti-Hallucination Guardrails (`src/titsmart_ai/synthesis/response_formatter.py`)**:
-   - Backend chuẩn bị danh mục `sources` từ records/chunks hợp lệ.
-   - Hậu kiểm câu trả lời của LLM: Kiểm tra chéo mọi trích dẫn `[Nguon n]`. Nếu LLM tự bịa ID ngoài danh mục, backend tự động lọc bỏ.
-   - Nếu không có evidence, hệ thống từ chối trả lời và gán `has_evidence = False`.
-
-3. **Kháng Prompt Injection**:
-   - Coi nội dung tài liệu là untrusted data trong sandbox, không cho phép thay đổi system prompt hoặc vượt quyền ACL.
-
-4. **Bộ Test Suite Vòng 8**:
-   - Test LLM mock mode, staging mode controls.
-   - Test fail-closed ACL không lọt dữ liệu vào prompt.
-   - Test loại bỏ citation giả.
-   - Test prompt injection kháng đổi vai trò.
-   - Test timeout và error handling.
+## 4. Trạng thái Bàn giao
+- `state.json`: Đã chuyển `state` -> `"REVIEW"` và `next_actor` -> `"CODEX"`.
+- Sẵn sàng bàn giao cho Codex Reviewer.

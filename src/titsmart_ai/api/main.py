@@ -121,6 +121,21 @@ def create_app() -> FastAPI:
         """
         return engine.answer(request.question, auth_context)
 
+    @app.post("/api/chat/llm", response_model=ChatResponse)
+    def chat_llm_endpoint(
+        request: ChatRequest,
+        auth_context: AuthContext = Depends(get_auth_context),
+        engine: ChatEngine = Depends(get_chat_engine),
+    ) -> ChatResponse:
+        """
+        Endpoint trả lời qua LLM (Mock/Staging) kết hợp Guardrails:
+        - ACL lọc dữ liệu trước khi sinh prompt.
+        - Kháng prompt injection.
+        - Citation Post-Validation chống bịa nguồn.
+        - has_evidence=False và từ chối khi thiếu dữ liệu.
+        """
+        return engine.answer_with_llm(request.question, auth_context)
+
     return app
 
 

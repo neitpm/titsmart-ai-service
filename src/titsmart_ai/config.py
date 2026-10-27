@@ -29,6 +29,13 @@ class Settings(BaseSettings):
     SUPABASE_ANON_KEY: Optional[str] = None
     SUPABASE_REQUEST_TIMEOUT: float = 10.0  # Timeout giây
 
+    # LLM Settings
+    LLM_MODE: str = "mock"  # Chỉ chấp nhận 'mock' hoặc 'staging'. CẤM TUYỆT ĐỐI 'production'
+    LLM_API_BASE: Optional[str] = None  # Endpoint cho LLM Staging (ví dụ Ollama/vLLM/OpenAI-compatible)
+    LLM_API_KEY: Optional[str] = None
+    LLM_MODEL: str = "titsmart-mock-llm"
+    LLM_REQUEST_TIMEOUT: float = 10.0  # Fail-closed timeout (giây)
+
     # Authentication & Security
     AUTH_MODE: str = "mock"  # "mock" hoặc "jwt"
     INTERNAL_AUTH_SECRET: Optional[str] = None  # Secret cho reverse proxy khi chạy mock mode
@@ -59,6 +66,16 @@ class Settings(BaseSettings):
         if v.lower() in ("production", "prod"):
             raise ValueError("Tuyệt đối không được cấu hình SUPABASE_ENV=production!")
         return v.lower()
+
+    @field_validator("LLM_MODE")
+    @classmethod
+    def check_llm_mode(cls, v: str) -> str:
+        val = v.lower()
+        if val in ("production", "prod"):
+            raise ValueError("Tuyệt đối không được cấu hình LLM_MODE=production! Chỉ chấp nhận 'mock' hoặc 'staging'.")
+        if val not in ("mock", "staging"):
+            raise ValueError(f"LLM_MODE không hợp lệ: '{v}'. Chỉ chấp nhận 'mock' hoặc 'staging'.")
+        return val
 
     @field_validator("SUPABASE_URL", mode="after")
     @classmethod
