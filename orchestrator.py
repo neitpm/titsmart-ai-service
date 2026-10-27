@@ -68,16 +68,15 @@ def run_coder_antigravity(task_desc: str) -> bool:
         f"Tuyệt đối không sửa ngoài phạm vi cho phép."
     )
 
-    # Tối ưu lệnh gọi agy: dùng model mặc định, tăng timeout lên 10m (600s) cho tác vụ coding lớn
+    # Dùng cú pháp chuẩn theo khuyến nghị: agy f"--print={prompt}" với model mặc định đã xác nhận hoạt động
     cmd = [
         "agy",
-        "--print",
-        prompt,
+        f"--print={prompt}",
         "--dangerously-skip-permissions",
         f"--print-timeout={TURN_TIMEOUT_SECONDS}s",
     ]
 
-    print(f"[Orchestrator] Running: agy --print [PROMPT] --dangerously-skip-permissions (cwd={REPO_DIR})")
+    print(f"[Orchestrator] Running: agy --print=[PROMPT] (cwd={REPO_DIR})")
 
     collected_output = []
     try:
