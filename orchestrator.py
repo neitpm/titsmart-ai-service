@@ -18,7 +18,7 @@ REVIEW_FEEDBACK = REPO_DIR / "handoff" / "review_feedback.md"
 LIVE_PROGRESS = REPO_DIR / "handoff" / "live_progress.md"
 
 DEFAULT_MAX_ITERATIONS = 10
-TURN_TIMEOUT_SECONDS = 300  # 5 phút tối đa cho mỗi lượt gọi
+TURN_TIMEOUT_SECONDS = 600  # 10 phút tối đa cho mỗi lượt coding phức tạp
 
 
 def read_state() -> dict:
@@ -68,15 +68,16 @@ def run_coder_antigravity(task_desc: str) -> bool:
         f"Tuyệt đối không sửa ngoài phạm vi cho phép."
     )
 
+    # Tối ưu lệnh gọi agy: dùng model mặc định, tăng timeout lên 10m (600s) cho tác vụ coding lớn
     cmd = [
         "agy",
-        f"--print={prompt}",
-        "--model=gemini-3.8-flash-low",
+        "--print",
+        prompt,
         "--dangerously-skip-permissions",
         f"--print-timeout={TURN_TIMEOUT_SECONDS}s",
     ]
 
-    print(f"[Orchestrator] Running: agy --model=gemini-3.8-flash-low --print=[PROMPT] (cwd={REPO_DIR})")
+    print(f"[Orchestrator] Running: agy --print [PROMPT] --dangerously-skip-permissions (cwd={REPO_DIR})")
 
     collected_output = []
     try:
