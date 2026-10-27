@@ -71,11 +71,12 @@ def run_coder_antigravity(task_desc: str) -> bool:
     cmd = [
         "agy",
         f"--print={prompt}",
+        "--model=gemini-3.8-flash-low",
         "--dangerously-skip-permissions",
         f"--print-timeout={TURN_TIMEOUT_SECONDS}s",
     ]
 
-    print(f"[Orchestrator] Running: agy --print=[PROMPT] --dangerously-skip-permissions (cwd={REPO_DIR})")
+    print(f"[Orchestrator] Running: agy --model=gemini-3.8-flash-low --print=[PROMPT] (cwd={REPO_DIR})")
 
     collected_output = []
     try:
