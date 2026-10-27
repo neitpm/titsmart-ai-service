@@ -1,8 +1,8 @@
 {
+  "round": 8,
   "iteration": 1,
   "max_iterations": 10,
-  "state": "PASSED",
+  "state": "CODING",
   "next_actor": "ANTIGRAVITY",
-  "active_round": 7,
-  "last_summary": "CODEX review PASSED: PromptSynthesizer and ResponseFormatter verified with deduplicated citations, strict ACL fail-closed, and 37 new tests. Total: 159 passed, 1 skipped."
+  "task": "Vòng 8: Xây dựng LLM Client Staging Adapter (chỉ cho phép staging/mock, không gọi production), tích hợp ChatEngine với ràng buộc: bắt buộc citation, fail-closed ACL, và 'không đủ bằng chứng thì không trả lời' (has_evidence=False)"
 }
