@@ -1,17 +1,20 @@
 {
-  "iteration": 9,
-  "max_iterations": 15,
+  "iteration": 12,
+  "max_iterations": 20,
   "state": "PASSED",
   "next_actor": "ANTIGRAVITY",
-  "task": "Vòng 3 hoàn thành [ĐẠT CÓ ĐIỀU KIỆN]: SupabaseDataQueryTool, strict hostname allowlist, explicit mapping & offline test suite (42 passed)",
+  "task": "Vòng 4 hoàn thành [ĐẠT CÓ ĐIỀU KIỆN]: RAG core offline, DocumentBuilder, TextChunker, EmbeddingProvider, VectorStore & Fail-Closed ACL",
   "changed_files": [
-    "src/titsmart_ai/config.py",
-    "src/titsmart_ai/adapters/__init__.py",
-    "src/titsmart_ai/adapters/supabase_adapter.py",
+    "migrations/001_knowledge_vectors.sql",
+    "src/titsmart_ai/domain/documents.py",
+    "src/titsmart_ai/domain/models.py",
+    "src/titsmart_ai/domain/__init__.py",
+    "src/titsmart_ai/ingestion/document_builder.py",
+    "src/titsmart_ai/ingestion/__init__.py",
+    "src/titsmart_ai/tools/vector_store.py",
     "src/titsmart_ai/tools/__init__.py",
-    "src/titsmart_ai/tools/query_tool.py",
-    "tests/test_supabase_adapter.py"
+    "tests/test_vector_rag.py"
   ],
-  "last_test": "PASSED (42 passed, 1 skipped in 0.36s)",
+  "last_test": "PASSED (56 passed, 1 skipped in 0.38s)",
   "last_review": "PASSED [ĐẠT CÓ ĐIỀU KIỆN] by CODEX"
 }

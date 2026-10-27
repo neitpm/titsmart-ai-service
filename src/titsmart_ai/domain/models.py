@@ -94,6 +94,8 @@ class FieldLog(BaseDataModel):
     project_code: str
     timestamp: Optional[str] = None
     images_count: Optional[int] = Field(default=0, ge=0)
+    note: Optional[str] = None
+    notes: Optional[str] = None
 
     @field_validator("images_count", mode="before")
     @classmethod
