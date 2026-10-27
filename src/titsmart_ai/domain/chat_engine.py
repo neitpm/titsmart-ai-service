@@ -1,5 +1,7 @@
 """Deterministic ChatEngine coordinating Router, DataQueryTool, VectorStore, PromptSynthesizer, ResponseFormatter, and LLMAdapter."""
+import logging
 from typing import Optional, List
+from titsmart_ai.config import settings
 from titsmart_ai.domain.chat import ChatResponse, ChatSource
 from titsmart_ai.security.auth import AuthContext
 from titsmart_ai.router.query_router import QueryRouter, QueryIntent, QueryPlan
@@ -7,8 +9,10 @@ from titsmart_ai.tools.query_tool import DataQueryTool
 from titsmart_ai.tools.vector_store import VectorStore, EmbeddingProvider
 from titsmart_ai.synthesis.prompt_synthesizer import PromptSynthesizer, SynthesizedPrompt
 from titsmart_ai.synthesis.response_formatter import ResponseFormatter
-from titsmart_ai.llm.llm_adapter import LLMAdapter, MockLLMAdapter
+from titsmart_ai.llm.llm_adapter import LLMAdapter, MockLLMAdapter, get_llm_adapter
 from titsmart_ai.llm.guardrails import LLMGuardrails
+
+logger = logging.getLogger(__name__)
 
 
 class ChatEngine:
@@ -36,7 +40,7 @@ class ChatEngine:
         self.embedding_provider = embedding_provider
         self.prompt_synthesizer = prompt_synthesizer or PromptSynthesizer()
         self.response_formatter = response_formatter or ResponseFormatter()
-        self.llm_adapter = llm_adapter or MockLLMAdapter(response_formatter=self.response_formatter)
+        self.llm_adapter = llm_adapter or get_llm_adapter(settings.LLM_MODE, response_formatter=self.response_formatter)
 
     def answer(self, question: str, auth_context: AuthContext) -> ChatResponse:
         # 1. FAIL-CLOSED: Kiểm tra quyền dự án của user
@@ -167,8 +171,12 @@ class ChatEngine:
         if plan.intent in (QueryIntent.VECTOR_SEARCH, QueryIntent.HYBRID):
             query_text = plan.vector_query or plan.normalized_question
             target_projects = {plan.project_code} if plan.project_code else auth_context.allowed_project_codes
-            query_vec = self.embedding_provider.embed([query_text])[0]
-            vector_results = self.vector_store.search(query_vec, project_codes=target_projects, top_k=3)
+            try:
+                query_vec = self.embedding_provider.embed([query_text])[0]
+                vector_results = self.vector_store.search(query_vec, project_codes=target_projects, top_k=3)
+            except Exception as e:
+                logger.warning("Vector retrieval failed (Fail-Closed): %s", str(e))
+                vector_results = []
             for r in (vector_results or []):
                 backend_sources.append(
                     ChatSource(
@@ -254,8 +262,12 @@ class ChatEngine:
         if plan.intent in (QueryIntent.VECTOR_SEARCH, QueryIntent.HYBRID):
             query_text = plan.vector_query or plan.normalized_question
             target_projects = {plan.project_code} if plan.project_code else auth_context.allowed_project_codes
-            query_vec = self.embedding_provider.embed([query_text])[0]
-            vector_results = self.vector_store.search(query_vec, project_codes=target_projects, top_k=3)
+            try:
+                query_vec = self.embedding_provider.embed([query_text])[0]
+                vector_results = self.vector_store.search(query_vec, project_codes=target_projects, top_k=3)
+            except Exception as e:
+                logger.warning("Vector retrieval failed in synthesize_prompt: %s", str(e))
+                vector_results = []
 
         return self.prompt_synthesizer.synthesize(
             question=question,
@@ -300,8 +312,16 @@ class ChatEngine:
         query_text = plan.vector_query or plan.normalized_question
         target_projects = {plan.project_code} if plan.project_code else auth_context.allowed_project_codes
 
-        query_vec = self.embedding_provider.embed([query_text])[0]
-        results = self.vector_store.search(query_vec, project_codes=target_projects, top_k=3)
+        try:
+            query_vec = self.embedding_provider.embed([query_text])[0]
+            results = self.vector_store.search(query_vec, project_codes=target_projects, top_k=3)
+        except Exception as e:
+            logger.warning("Vector retrieval failed in _handle_vector_intent (Fail-Closed): %s", str(e))
+            return self.response_formatter.format_no_evidence(
+                "Không thể kết nối đến dịch vụ vector embedding hoặc quá thời gian xử lý (Timeout). Hệ thống kích hoạt trạng thái Fail-Closed.",
+                intent=QueryIntent.VECTOR_SEARCH,
+                warnings=[f"Vector Search Fail-Closed: {type(e).__name__}"],
+            )
 
         return self.response_formatter.format_vector_response(results)
 

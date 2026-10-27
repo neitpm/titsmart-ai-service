@@ -1,8 +1,8 @@
 {
   "round": 8,
-  "iteration": 2,
+  "iteration": 3,
   "max_iterations": 10,
   "state": "PASSED",
   "next_actor": "ANTIGRAVITY",
-  "task": "Tạo một file test nhỏ để xác nhận orchestrator nhận task và chạy pytest."
+  "task": "Tích hợp Ollama local với qwen3:8b, fallback qwen3:4b và bge-m3:latest. Giữ mock test, ACL fail-closed, citation validation, prompt-injection guardrail và timeout."
 }

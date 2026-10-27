@@ -1,37 +1,27 @@
-# Báo cáo Coder: Xác nhận Orchestrator Nhận Task & Chạy Pytest
+# Báo cáo Coder: Tích hợp Ollama Local (qwen3:8b, fallback qwen3:4b, bge-m3:latest) & Cập nhật Tài liệu
 
-## 1. Mục tiêu và Phạm vi Thực hiện
-- Nhiệm vụ: Tạo một file test nhỏ để xác nhận orchestrator nhận task và chạy pytest.
-- File bổ sung: `tests/test_orchestrator_task.py`.
+## 1. Mục tiêu và Phạm vi Hoàn thành
+- **Tích hợp Ollama Local**:
+  - LLM sinh câu trả lời: `qwen3:8b` (fallback tự động sang `qwen3:4b` khi gặp sự cố, timeout hoặc HTTP 500).
+  - Embedding Model: `bge-m3:latest` (1024 dimensions) cho Semantic Search & Vector RAG.
+  - Cấm tuyệt đối sử dụng `bge-m3` để sinh văn bản / trò chuyện (trả về HTTP 400).
+- **Quy chuẩn Bảo mật & Guardrails**:
+  - `LLM_MODE`: Chỉ chấp nhận `'mock'` hoặc `'staging'`. Cấm tuyệt đối `'production'`.
+  - ACL Fail-Closed: Lọc dữ liệu trước khi ghép vào LLM prompt.
+  - Citation Post-Validation: Hậu kiểm chéo citation với context thực tế, gỡ bỏ citation bịa.
+  - Kháng Prompt Injection: Xử lý untrusted context, ngăn chặn thay đổi system instructions.
+  - Fail-Closed: Không đủ evidence -> `has_evidence=False`. Timeout / network error -> Fail-closed an toàn.
+- **Offline Testing**: `FakeOllamaClient` hỗ trợ giả lập 100% offline, không gọi mạng.
+- **Khắc phục theo Review Feedback**:
+  - `.env.example`: Cập nhật cấu hình Ollama local gồm `LLM_MODE`, `OLLAMA_BASE_URL`, `OLLAMA_PRIMARY_MODEL`, `OLLAMA_FALLBACK_MODEL`, `OLLAMA_EMBEDDING_MODEL`, `OLLAMA_EMBEDDING_DIMENSIONS` và `OLLAMA_REQUEST_TIMEOUT`. Loại bỏ hoàn toàn cấu hình embedding cũ `text-embedding-004`/768.
+  - `README.md`: Bổ sung chi tiết tài liệu về kiến trúc Ollama local, cơ chế fallback qwen3:8b -> qwen3:4b, bge-m3:latest (1024 dimensions), ràng buộc local loopback và cấm chat bằng embedding model, giải thích các chế độ `mock`/`staging`, các cơ chế bảo mật guardrails (ACL, prompt injection, citation post-validation, timeout fail-closed), và hướng dẫn chạy test.
 
-## 2. Chi tiết Triển khai Test (`tests/test_orchestrator_task.py`)
-1. `test_orchestrator_receives_task`:
-   - Xác nhận orchestrator đã đọc và lưu trữ `task` hợp lệ vào `state.json`.
-   - Kiểm tra chuỗi task không rỗng và có kiểu dữ liệu chuỗi hợp lệ.
-2. `test_orchestrator_state_schema_keys`:
-   - Kiểm tra tính toàn vẹn của các trường trong `state.json` (`round`, `iteration`, `max_iterations`, `state`, `next_actor`, `task`).
-   - Ràng buộc giá trị hợp lệ cho `state` (`CODING`, `REVIEW`, `NEEDS_FIX`, `PASSED`) và `next_actor` (`ANTIGRAVITY`, `CODEX`).
-3. `test_orchestrator_read_write_roundtrip`:
-   - Kiểm tra hàm `read_state` và `write_state` đọc/ghi JSON chuẩn UTF-8 sạch (hỗ trợ tiếng Việt và emoji).
-   - Xác nhận không phát sinh BOM (Byte Order Mark) gây lỗi parse.
-4. `test_orchestrator_read_state_file_not_found`:
-   - Kiểm tra cơ chế fail-fast khi `state.json` không tồn tại.
-5. `test_orchestrator_read_state_invalid_json`:
-   - Kiểm tra cơ chế fail-fast khi file state bị hỏng nội dung JSON.
-6. `test_pytest_execution_confirmation`:
-   - Kiểm tra xác nhận test runner pytest thực thi hoàn chỉnh trong môi trường test.
-
-## 3. Kết quả Chạy Test Xác minh
-Lệnh thực hiện:
-```bash
-python -m pytest tests -q
-```
-Kết quả:
+## 2. Kết quả Kiểm thử (Pytest)
 ```text
-192 passed, 1 skipped in 0.57s
+python -m pytest tests -q
+221 passed, 1 skipped in 0.67s
 ```
-Tất cả 192 tests (bao gồm 6 tests mới trong `tests/test_orchestrator_task.py`) đều pass 100%.
+Toàn bộ 221 test cases (bao gồm bộ test tích hợp `test_ollama_local_integration.py`) đều passed 100%.
 
-## 4. Trạng thái Bàn giao
-- `state.json`: Đã chuyển `state` -> `"REVIEW"` và `next_actor` -> `"CODEX"`.
-- Sẵn sàng bàn giao cho Codex Reviewer.
+## 3. Chuyển giao Trạng thái
+- `state.json`: Cập nhật `state` thành `"REVIEW"` và `next_actor` thành `"CODEX"`.

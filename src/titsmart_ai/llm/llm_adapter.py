@@ -218,6 +218,177 @@ class StagingLLMAdapter(LLMAdapter):
         )
 
 
+class OllamaLLMAdapter(StagingLLMAdapter):
+    """
+    Adapter LLM kết nối Ollama local:
+    - Mô hình chính: qwen3:8b (mặc định từ cấu hình OLLAMA_PRIMARY_MODEL).
+    - Mô hình dự phòng: qwen3:4b (tự động kích hoạt khi 8b không khả dụng hoặc lỗi).
+    - Cấm tuyệt đối dùng bge-m3 để trò chuyện / sinh văn bản.
+    - OLLAMA_BASE_URL: http://127.0.0.1:11434 (Chỉ kết nối local loopback, không gửi ra cloud/internet).
+    - Ràng buộc bảo mật:
+      + Prompt injection detection fail-closed.
+      + ACL pre-filtered context.
+      + Backend-driven sources & Citation Post-Validation.
+      + Timeout & Error Fail-Closed: trả về has_evidence=False, không bịa đặt nguồn hoặc rò rỉ dữ liệu.
+    """
+
+    def __init__(
+        self,
+        base_url: Optional[str] = None,
+        primary_model: Optional[str] = None,
+        fallback_model: Optional[str] = None,
+        timeout: Optional[float] = None,
+        response_formatter: Optional[ResponseFormatter] = None,
+        http_client: Optional[httpx.Client] = None,
+    ):
+        target_base = base_url or settings.OLLAMA_BASE_URL or "http://127.0.0.1:11434"
+        super().__init__(
+            api_base=target_base,
+            api_key=None,
+            model_name=primary_model or settings.OLLAMA_PRIMARY_MODEL,
+            timeout=timeout if timeout is not None else settings.OLLAMA_REQUEST_TIMEOUT,
+            response_formatter=response_formatter,
+            http_client=http_client,
+        )
+        self.primary_model = primary_model or settings.OLLAMA_PRIMARY_MODEL
+        self.fallback_model = fallback_model or settings.OLLAMA_FALLBACK_MODEL
+        self._validate_local_base_url()
+        self._validate_chat_models()
+
+    def _validate_local_base_url(self) -> None:
+        from urllib.parse import urlparse
+        parsed = urlparse(self.api_base or "")
+        host = (parsed.hostname or "").lower()
+        if host not in ("127.0.0.1", "localhost", "::1", "0.0.0.0"):
+            raise ValueError(
+                f"LỖI BẢO MẬT: OLLAMA_BASE_URL '{self.api_base}' không phải là local loopback! Tuyệt đối không gửi dữ liệu ra cloud hay internet."
+            )
+
+    def _validate_chat_models(self) -> None:
+        for m in (self.primary_model, self.fallback_model):
+            if m and "bge-m3" in m.lower():
+                raise ValueError(
+                    f"LỖI BẢO MẬT: Mô hình '{m}' là embedding model (1024 dims), cấm tuyệt đối dùng để trò chuyện!"
+                )
+
+    def _call_ollama_single(
+        self, client: httpx.Client, model: str, prompt: SynthesizedPrompt
+    ) -> str:
+        safe_full_prompt = LLMGuardrails.sanitize_untrusted_context(prompt.full_prompt)
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": prompt.system_prompt},
+                {"role": "user", "content": safe_full_prompt},
+            ],
+            "stream": False,
+            "temperature": 0.0,
+            "options": {"temperature": 0.0},
+        }
+
+        # 1. Thử gọi /api/chat (native Ollama endpoint)
+        url = "/api/chat" if str(client.base_url) else f"{self.api_base.rstrip('/')}/api/chat"
+        resp = client.post(url, json=payload)
+
+        # 2. Nếu 404 (ví dụ endpoint OpenAI-compatible /chat/completions)
+        if resp.status_code == 404:
+            fallback_url = "/chat/completions" if str(client.base_url) else f"{self.api_base.rstrip('/')}/chat/completions"
+            resp = client.post(fallback_url, json=payload)
+
+        resp.raise_for_status()
+        data = resp.json()
+
+        if "message" in data and isinstance(data["message"], dict) and "content" in data["message"]:
+            return data["message"]["content"]
+        elif "choices" in data and len(data["choices"]) > 0:
+            return data["choices"][0]["message"]["content"]
+        else:
+            raise ValueError(f"Định dạng phản hồi Ollama không hợp lệ: {data}")
+
+    def generate(
+        self,
+        prompt: SynthesizedPrompt,
+        backend_sources: List[ChatSource],
+    ) -> ChatResponse:
+        # 1. Guardrail phát hiện prompt injection trong câu hỏi
+        is_inj, inj_msg = LLMGuardrails.detect_injection(prompt.user_prompt)
+        if is_inj:
+            return self.formatter.format_unsupported(
+                f"Yêu cầu bị từ chối do vi phạm chính sách an toàn thông tin: {inj_msg}",
+                warnings=[inj_msg or "Prompt Injection Detected"],
+            )
+
+        # 2. Guardrail không đủ bằng chứng
+        has_sql = prompt.metadata.get("has_sql_context", False)
+        has_vec = prompt.metadata.get("has_vector_context", False)
+        if not backend_sources and not has_sql and not has_vec:
+            return self.formatter.format_no_evidence(
+                "Hệ thống không tìm thấy đủ dữ kiện và bằng chứng xác thực trong cơ sở dữ liệu để trả lời câu hỏi này.",
+                intent=prompt.intent,
+                warnings=["Không đủ dữ liệu xác thực (has_evidence=False)"],
+            )
+
+        client = self._get_client()
+        raw_text: Optional[str] = None
+        warnings: List[str] = []
+        primary_failed = False
+
+        # 3. Gọi Mô hình chính: qwen3:8b
+        try:
+            raw_text = self._call_ollama_single(client, self.primary_model, prompt)
+        except Exception as e_primary:
+            primary_failed = True
+            err_msg = (
+                f"Primary model '{self.primary_model}' error ({type(e_primary).__name__}: {str(e_primary)}). "
+                f"Kích hoạt fallback sang '{self.fallback_model}'."
+            )
+            logger.warning(err_msg)
+            warnings.append(f"Mô hình chính {self.primary_model} không khả dụng, đã chuyển sang fallback {self.fallback_model}")
+
+        # 4. Fallback Model: qwen3:4b khi 8b lỗi hoặc không khả dụng
+        if primary_failed:
+            try:
+                raw_text = self._call_ollama_single(client, self.fallback_model, prompt)
+                warnings.append(f"Phản hồi được tạo bởi mô hình dự phòng: {self.fallback_model}")
+            except httpx.TimeoutException as e_to:
+                logger.error("Fallback model '%s' timeout: %s", self.fallback_model, str(e_to))
+                warnings.append(f"Fallback model '{self.fallback_model}' Timeout")
+                return self.formatter.format_no_evidence(
+                    "Cả mô hình ngôn ngữ chính và mô hình dự phòng đều quá thời gian chờ (Timeout). Hệ thống kích hoạt trạng thái an toàn Fail-Closed.",
+                    intent=prompt.intent,
+                    warnings=warnings,
+                )
+            except Exception as e_fb:
+                logger.error("Fallback model '%s' error: %s", self.fallback_model, str(e_fb))
+                warnings.append(f"Fallback model '{self.fallback_model}' Error: {type(e_fb).__name__}")
+                return self.formatter.format_no_evidence(
+                    "Không thể kết nối đến mô hình ngôn ngữ Ollama (cả mô hình chính và mô hình dự phòng đều không khả dụng hoặc lỗi). Hệ thống kích hoạt trạng thái Fail-Closed.",
+                    intent=prompt.intent,
+                    warnings=warnings,
+                )
+
+        if raw_text is None:
+            return self.formatter.format_no_evidence(
+                "Không nhận được phản hồi hợp lệ từ mô hình ngôn ngữ. Hệ thống kích hoạt trạng thái Fail-Closed.",
+                intent=prompt.intent,
+                warnings=warnings or ["No response from LLM"],
+            )
+
+        # 5. Citation Post-Validation (Chống LLM bịa nguồn)
+        validated_text, final_sources = LLMGuardrails.post_validate_citations(
+            raw_text, backend_sources
+        )
+
+        return self.formatter.standardize_technical_answer(
+            answer_text=validated_text,
+            sources=final_sources,
+            intent=prompt.intent,
+            has_evidence=bool(final_sources),
+            append_citations=True,
+            warnings=warnings if warnings else None,
+        )
+
+
 def get_llm_adapter(
     llm_mode: Optional[str] = None,
     response_formatter: Optional[ResponseFormatter] = None,
@@ -227,12 +398,13 @@ def get_llm_adapter(
     Factory tạo LLMAdapter tương ứng theo cấu hình:
     - Cấm tuyệt đối 'production'.
     - Hỗ trợ 'mock' và 'staging'.
+    - Staging mode sử dụng OllamaLLMAdapter (qwen3:8b với fallback qwen3:4b).
     """
     mode = (llm_mode or settings.LLM_MODE).lower()
     if mode in ("production", "prod"):
         raise ValueError("LỖI BẢO MẬT: Tuyệt đối không được kích hoạt LLM_MODE='production'!")
     elif mode == "staging":
-        return StagingLLMAdapter(
+        return OllamaLLMAdapter(
             response_formatter=response_formatter,
             http_client=http_client,
         )

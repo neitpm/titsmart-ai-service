@@ -7,7 +7,12 @@ from titsmart_ai.domain.chat import ChatRequest, ChatResponse
 from titsmart_ai.domain.chat_engine import ChatEngine
 from titsmart_ai.router.query_router import QueryRouter
 from titsmart_ai.tools.query_tool import InMemoryDataQueryTool
-from titsmart_ai.tools.vector_store import InMemoryVectorStore, DeterministicFakeEmbeddingProvider
+from titsmart_ai.tools.vector_store import (
+    InMemoryVectorStore,
+    DeterministicFakeEmbeddingProvider,
+    OllamaEmbeddingProvider,
+)
+from titsmart_ai.llm.llm_adapter import get_llm_adapter
 from titsmart_ai.ingestion.document_builder import DocumentBuilder, TextChunker
 
 # Cache kết quả nạp sample trong bộ nhớ
@@ -42,8 +47,15 @@ def get_chat_engine() -> ChatEngine:
         query_tool = InMemoryDataQueryTool(projects=projects, tasks=tasks, issues=issues)
 
         # 2. Khởi tạo VectorStore và nạp vector từ sample
-        embedding_provider = DeterministicFakeEmbeddingProvider(dimensions=384)
-        vector_store = InMemoryVectorStore(expected_dimensions=384)
+        if settings.LLM_MODE == "staging":
+            embedding_provider = OllamaEmbeddingProvider()
+            vector_store = InMemoryVectorStore(expected_dimensions=settings.OLLAMA_EMBEDDING_DIMENSIONS)
+            llm_adapter = get_llm_adapter("staging")
+        else:
+            embedding_provider = DeterministicFakeEmbeddingProvider(dimensions=384)
+            vector_store = InMemoryVectorStore(expected_dimensions=384)
+            llm_adapter = get_llm_adapter("mock")
+
         chunker = TextChunker(chunk_size=1000, overlap=150)
 
         all_chunks = []
@@ -75,6 +87,7 @@ def get_chat_engine() -> ChatEngine:
             query_tool=query_tool,
             vector_store=vector_store,
             embedding_provider=embedding_provider,
+            llm_adapter=llm_adapter,
         )
 
     return _chat_engine_instance

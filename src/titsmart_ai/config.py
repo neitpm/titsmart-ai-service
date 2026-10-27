@@ -36,6 +36,14 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "titsmart-mock-llm"
     LLM_REQUEST_TIMEOUT: float = 10.0  # Fail-closed timeout (giây)
 
+    # Ollama Local Settings (Round 8)
+    OLLAMA_BASE_URL: str = "http://127.0.0.1:11434"
+    OLLAMA_PRIMARY_MODEL: str = "qwen3:8b"
+    OLLAMA_FALLBACK_MODEL: str = "qwen3:4b"
+    OLLAMA_EMBEDDING_MODEL: str = "bge-m3:latest"
+    OLLAMA_EMBEDDING_DIMENSIONS: int = 1024
+    OLLAMA_REQUEST_TIMEOUT: float = 30.0  # Fail-closed timeout (giây)
+
     # Authentication & Security
     AUTH_MODE: str = "mock"  # "mock" hoặc "jwt"
     INTERNAL_AUTH_SECRET: Optional[str] = None  # Secret cho reverse proxy khi chạy mock mode
@@ -76,6 +84,29 @@ class Settings(BaseSettings):
         if val not in ("mock", "staging"):
             raise ValueError(f"LLM_MODE không hợp lệ: '{v}'. Chỉ chấp nhận 'mock' hoặc 'staging'.")
         return val
+
+    @field_validator("OLLAMA_BASE_URL")
+    @classmethod
+    def check_ollama_base_url_local(cls, v: str) -> str:
+        if not v:
+            return "http://127.0.0.1:11434"
+        from urllib.parse import urlparse
+        parsed = urlparse(v)
+        hostname = (parsed.hostname or "").lower()
+        if hostname not in ("127.0.0.1", "localhost", "::1", "0.0.0.0"):
+            raise ValueError(
+                f"LỖI BẢO MẬT: OLLAMA_BASE_URL '{v}' không phải là local loopback! Tuyệt đối không gửi dữ liệu ra cloud hay internet."
+            )
+        return v
+
+    @field_validator("LLM_MODEL", "OLLAMA_PRIMARY_MODEL", "OLLAMA_FALLBACK_MODEL")
+    @classmethod
+    def check_chat_model_not_embedding(cls, v: str) -> str:
+        if v and "bge-m3" in v.lower():
+            raise ValueError(
+                f"LỖI BẢO MẬT: Mô hình '{v}' là embedding model (1024 dims), cấm tuyệt đối dùng để trò chuyện!"
+            )
+        return v
 
     @field_validator("SUPABASE_URL", mode="after")
     @classmethod

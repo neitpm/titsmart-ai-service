@@ -1,8 +1,14 @@
 """Vector store protocols, deterministic fake embeddings, and in-memory vector store with ACL filtering."""
 import math
 import hashlib
+import logging
+from urllib.parse import urlparse
 from typing import Protocol, List, Optional, Set, Dict, runtime_checkable
+import httpx
+from titsmart_ai.config import settings
 from titsmart_ai.domain.documents import TextChunk, SearchResult
+
+logger = logging.getLogger(__name__)
 
 
 def cosine_similarity(v1: List[float], v2: List[float]) -> float:
@@ -53,6 +59,84 @@ class DeterministicFakeEmbeddingProvider:
                 vec = [x / norm for x in vec]
             results.append(vec)
         return results
+
+
+class OllamaEmbeddingProvider:
+    """
+    Embedding Provider kết nối Ollama local với mô hình bge-m3:latest (1024 dimensions).
+    Ràng buộc an toàn:
+    - OLLAMA_BASE_URL: http://127.0.0.1:11434 (Chỉ kết nối local loopback, không gửi ra internet/cloud).
+    - Dimensions: 1024 (chuẩn bge-m3:latest).
+    - Không dùng bge-m3 để trò chuyện / sinh văn bản.
+    - Timeout & Error Fail-Closed: Kích hoạt fail-closed an toàn khi lỗi mạng hoặc timeout.
+    """
+    dimensions: int = 1024
+
+    def __init__(
+        self,
+        base_url: Optional[str] = None,
+        model: Optional[str] = None,
+        dimensions: Optional[int] = None,
+        timeout: Optional[float] = None,
+        http_client: Optional[httpx.Client] = None,
+    ):
+        raw_url = (base_url or settings.OLLAMA_BASE_URL or "http://127.0.0.1:11434").rstrip("/")
+        self._validate_local_url(raw_url)
+        self.base_url = raw_url
+        self.model = model or settings.OLLAMA_EMBEDDING_MODEL
+        self.dimensions = dimensions or settings.OLLAMA_EMBEDDING_DIMENSIONS
+        self.timeout = timeout if timeout is not None else settings.OLLAMA_REQUEST_TIMEOUT
+        self._client = http_client
+
+    def _validate_local_url(self, url: str) -> None:
+        parsed = urlparse(url)
+        hostname = (parsed.hostname or "").lower()
+        if hostname not in ("127.0.0.1", "localhost", "::1", "0.0.0.0"):
+            raise ValueError(
+                f"LỖI BẢO MẬT: OLLAMA_BASE_URL '{url}' không phải là local loopback! Tuyệt đối không gửi dữ liệu ra cloud hay internet."
+            )
+
+    def _get_client(self) -> httpx.Client:
+        if self._client is not None:
+            return self._client
+        return httpx.Client(base_url=self.base_url, timeout=self.timeout)
+
+    def embed(self, texts: List[str]) -> List[List[float]]:
+        if not texts:
+            return []
+        client = self._get_client()
+        embeddings: List[List[float]] = []
+
+        try:
+            # 1. Thử gọi /api/embed (batch)
+            url = "/api/embed" if str(client.base_url) else f"{self.base_url}/api/embed"
+            resp = client.post(url, json={"model": self.model, "input": texts})
+            if resp.status_code == 200:
+                data = resp.json()
+                if "embeddings" in data:
+                    embeddings = data["embeddings"]
+            elif resp.status_code == 404:
+                # 2. Fallback sang /api/embeddings (single)
+                single_url = "/api/embeddings" if str(client.base_url) else f"{self.base_url}/api/embeddings"
+                for text in texts:
+                    s_resp = client.post(single_url, json={"model": self.model, "prompt": text})
+                    s_resp.raise_for_status()
+                    embeddings.append(s_resp.json()["embedding"])
+            else:
+                resp.raise_for_status()
+        except httpx.TimeoutException as e:
+            logger.error("Ollama embedding timeout: %s", str(e))
+            raise RuntimeError(f"Ollama embedding request timed out (Fail-Closed): {e}") from e
+        except Exception as e:
+            logger.error("Ollama embedding error: %s", str(e))
+            raise RuntimeError(f"Ollama embedding error (Fail-Closed): {e}") from e
+
+        for vec in embeddings:
+            if len(vec) != self.dimensions:
+                raise ValueError(
+                    f"Vector dimension trả về từ Ollama ({len(vec)}) không khớp với cấu hình ({self.dimensions})"
+                )
+        return embeddings
 
 
 @runtime_checkable

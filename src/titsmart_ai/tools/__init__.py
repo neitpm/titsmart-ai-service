@@ -3,6 +3,7 @@ from .query_tool import DataQueryTool, InMemoryDataQueryTool, SupabaseDataQueryT
 from .vector_store import (
     EmbeddingProvider,
     DeterministicFakeEmbeddingProvider,
+    OllamaEmbeddingProvider,
     VectorStore,
     InMemoryVectorStore,
     cosine_similarity,
@@ -14,6 +15,7 @@ __all__ = [
     "SupabaseDataQueryTool",
     "EmbeddingProvider",
     "DeterministicFakeEmbeddingProvider",
+    "OllamaEmbeddingProvider",
     "VectorStore",
     "InMemoryVectorStore",
     "cosine_similarity",
