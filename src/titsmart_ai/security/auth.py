@@ -93,7 +93,8 @@ def get_auth_context(
 
             # Lấy quyền dự án từ server-side membership lookup
             # Frontend hoàn toàn không thể tự phong quyền
-            allowed_projects = membership_provider.get_allowed_projects(user_id)
+            # Truyền kèm chính token của user để client áp dụng context RLS (auth.uid() = user_id)
+            allowed_projects = membership_provider.get_allowed_projects(user_id, access_token=token)
 
             return AuthContext(
                 user_id=user_id,

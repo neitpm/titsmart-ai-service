@@ -15,10 +15,12 @@ class ProjectMembershipProvider(Protocol):
     """
     Protocol trừu tượng tra cứu quyền dự án của user từ server-side DB/Store:
     - user_id được lấy từ verified JWT sub.
-    - Server truy vấn trực tiếp bảng project_members.
+    - access_token: JWT của chính user để chuyển tiếp xuống Supabase PostgREST client,
+      bảo đảm database RLS kích hoạt đúng auth.uid() = user_id.
+    - Server truy vấn trực tiếp bảng project_members dưới context user.
     - Frontend hoàn toàn không có quyền khai báo allowed_project_codes.
     """
-    def get_allowed_projects(self, user_id: str) -> Set[str]:
+    def get_allowed_projects(self, user_id: str, access_token: Optional[str] = None) -> Set[str]:
         ...
 
 
@@ -34,7 +36,7 @@ class InMemoryProjectMembershipProvider:
             "admin_user": {"TITS-01", "TITS-02", "DA-01", "TRAM_BIEN_AP_500KV"},
         })
 
-    def get_allowed_projects(self, user_id: str) -> Set[str]:
+    def get_allowed_projects(self, user_id: str, access_token: Optional[str] = None) -> Set[str]:
         return set(self._mapping.get(user_id, set()))
 
     def set_user_projects(self, user_id: str, projects: Set[str]) -> None:
@@ -44,24 +46,35 @@ class InMemoryProjectMembershipProvider:
 class SupabaseProjectMembershipProvider:
     """
     Adapter tra cứu bảng project_members thực tế từ Supabase qua ReadOnlyDataClient:
-    - Thực hiện query: select_project_members(user_id)
-    - Bảo đảm an toàn fail-closed: lỗi mạng hoặc không tìm thấy user -> trả về set() rỗng.
+    - Nhận access_token của user để query với header Authorization: Bearer <user_jwt>,
+      cho phép PostgreSQL Row Level Security (RLS) áp dụng chính xác auth.uid() = user_id.
+    - Ghi log tường minh phân biệt giữa:
+        1) User không có dự án nào (Normal ACL empty).
+        2) Database gặp sự cố mạng / timeout (Fail-closed due to DB error).
+    - Bảo đảm an toàn tuyệt đối: Không tiết lộ token/secret trong log.
     """
     def __init__(self, client: ReadOnlyDataClient):
         self._client = client
 
-    def get_allowed_projects(self, user_id: str) -> Set[str]:
+    def get_allowed_projects(self, user_id: str, access_token: Optional[str] = None) -> Set[str]:
         if not user_id or not user_id.strip():
+            logger.warning("[AUTH_MEMBERSHIP] user_id rỗng, từ chối cấp quyền.")
             return set()
 
+        clean_uid = user_id.strip()
         try:
-            # Tra cứu từ bảng project_members qua protocol client
-            rows = self._client.select_project_members(user_id=user_id.strip())
+            # Tra cứu bảng project_members.
+            # Client hỗ trợ truyền access_token để RLS thực thi auth.uid()
+            rows = self._client.select_project_members(user_id=clean_uid, access_token=access_token)
             if not rows:
+                logger.info(f"[AUTH_MEMBERSHIP] User '{clean_uid}' không thuộc dự án nào trong hệ thống (ACL empty).")
                 return set()
 
-            return {str(r.get("project_code")) for r in rows if r.get("project_code")}
+            allowed = {str(r.get("project_code")) for r in rows if r.get("project_code")}
+            logger.info(f"[AUTH_MEMBERSHIP] Tra cứu thành công: User '{clean_uid}' có quyền trên {len(allowed)} dự án.")
+            return allowed
         except Exception as e:
-            logger.error(f"Lỗi khi tra cứu project_members cho user {user_id}: {e}")
-            # Fail-closed: Khi database gặp sự cố, tuyệt đối không cấp quyền bừa bãi
+            # Phân biệt rõ sự cố database với trường hợp user không có quyền
+            logger.error(f"[SECURITY_ALERT][DB_OUTAGE] Tra cứu project_members thất bại cho user '{clean_uid}' do lỗi database: {type(e).__name__}. Áp dụng fail-closed.")
+            # Fail-closed: Khi database gặp sự cố, tuyệt đối không cấp quyền
             return set()

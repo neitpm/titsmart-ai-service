@@ -61,7 +61,7 @@ class FakeReadOnlyClient:
             res = [i for i in res if (i.status or "").upper() == status.upper()]
         return res
 
-    def select_project_members(self, user_id: str):
+    def select_project_members(self, user_id: str, access_token: Optional[str] = None):
         if self.simulate_timeout:
             raise DatabaseQueryError("Truy vấn bảng project_members bị quá thời gian (10.0s)")
         if self.simulate_error:

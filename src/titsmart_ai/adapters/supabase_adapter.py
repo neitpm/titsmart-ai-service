@@ -84,7 +84,7 @@ class ReadOnlyDataClient(Protocol):
     ) -> List[Issue]:
         ...
 
-    def select_project_members(self, user_id: str) -> List[Dict[str, Any]]:
+    def select_project_members(self, user_id: str, access_token: Optional[str] = None) -> List[Dict[str, Any]]:
         ...
 
 
@@ -158,9 +158,18 @@ class SupabaseReadOnlyClient:
             logger.error("Lỗi khi truy vấn bảng issues")
             raise DatabaseQueryError(f"Không thể truy vấn danh sách sự cố: {str(e)}") from e
 
-    def select_project_members(self, user_id: str) -> List[Dict[str, Any]]:
+    def select_project_members(self, user_id: str, access_token: Optional[str] = None) -> List[Dict[str, Any]]:
         try:
-            res = self._client.table("project_members").select("*").eq("user_id", user_id).execute()
+            # Nếu có access_token của user, thực hiện query dưới context của user (RLS auth.uid())
+            client_to_use = self._client
+            if access_token and hasattr(self._client, "auth"):
+                # Supabase Python client hỗ trợ postgrest.auth(access_token)
+                try:
+                    client_to_use = self._client.postgrest.auth(access_token)
+                except Exception:
+                    client_to_use = self._client
+
+            res = client_to_use.table("project_members").select("*").eq("user_id", user_id).execute()
             data = res.data or []
             return [normalize_record_keys(row) for row in data]
         except TimeoutError as e:
