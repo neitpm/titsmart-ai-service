@@ -1,81 +1,38 @@
-# Coder Report — Vòng 7: PromptSynthesizer & ResponseFormatter Chuẩn Hóa Kỹ Thuật
+# Kế hoạch Vòng 8: Đối chiếu Kiến trúc ProjectLens và Triển khai LLM Staging Adapter
 
-## 1. Tóm tắt mục tiêu & kết quả thực hiện
-Đã hoàn thành toàn bộ yêu cầu Vòng 7 theo đúng phạm vi và nguyên tắc an toàn:
-- Xây dựng module tổng hợp prompt có cấu trúc `PromptSynthesizer` và data contract `SynthesizedPrompt`.
-- Xây dựng module chuẩn hóa câu trả lời kỹ thuật `ResponseFormatter` tích hợp danh mục trích dẫn minh bạch (citations catalog) và khử trùng lặp nguồn (source deduplication).
-- Tích hợp liền mạch vào `ChatEngine`, hỗ trợ Dependency Injection và cung cấp phương thức `synthesize_prompt()` phục vụ kiểm toán / LLM integration với cơ chế Fail-Closed kiểm soát quyền truy cập theo `AuthContext`.
-- Bổ sung bộ kiểm thử hồi quy và đơn vị toàn diện `tests/test_synthesis.py` (37 test cases mới).
-- Toàn bộ test suite chạy thành công: **159 passed, 1 skipped** (1 skipped là test tích hợp live Supabase staging khi không có credentials thực tế).
+## 1. Phân tích Repository ProjectLens (`https://github.com/neitpm/ProjectLens`)
 
----
+### Điểm mạnh nổi bật của ProjectLens:
+- **System Prompt chuẩn kỹ thuật TitSmart**: Có quy tắc trích xuất rõ ràng về bảng giá, khối lượng, vật tư, đơn giá và ràng buộc kiểm soát ảo giác (Anti-Hallucination): *"Nếu thiếu thông tin, nói rõ: Tài liệu hiện tại không đề cập đến thông tin này"*.
+- **Structured Lookup tách biệt RAG ngữ nghĩa**: Tách hẳn phần tra cứu chi phí cao nhất (`highest_cost_answer`) và danh mục bản vẽ/phụ lục (`drawing_inventory_answer`) ra khỏi vector search để tránh ảo giác số liệu.
+- **pgvector schema (384 dims)**: Sử dụng MiniLM-L12 384 dimensions tương thích hoàn toàn với schema pgvector chúng ta đã thiết kế ở Vòng 4 (`migrations/001_knowledge_vectors.sql`).
 
-## 2. Chi tiết các thành phần kỹ thuật đã xây dựng
-
-### A. `src/titsmart_ai/synthesis/prompt_synthesizer.py`
-- **`SynthesizedPrompt` (Pydantic Model)**:
-  - Khóa nghiêm ngặt schema (`extra="forbid"`).
-  - Bao gồm: `system_prompt`, `user_prompt`, `sql_context`, `vector_context`, `full_prompt`, `token_estimate`, `intent`, `metadata`.
-- **`SYSTEM_PROMPT_TEMPLATE`**:
-  - Thiết lập vai trò: Chuyên gia Phân tích Tiến độ & Quản lý Dự án Xây dựng.
-  - 4 nguyên tắc bắt buộc:
-    1. Zero Hallucination (tuyệt đối không bịa số liệu).
-    2. Grounding & Citations (mọi kết luận/số liệu đều kèm nguồn [Nguồn X]).
-    3. Văn phong kỹ thuật xây dựng (rõ ràng, phân tách rành mạch: tổng quan, số liệu, nhật ký/sự cố, kiến nghị).
-    4. Fail-Closed (thiếu dữ liệu phải thông báo không tìm thấy, không phỏng đoán).
-- **`PromptSynthesizer`**:
-  - `build_system_prompt()`: Cung cấp system prompt mặc định hoặc tùy biến.
-  - `format_sql_context()`: Chuẩn hóa dữ liệu SQL (project summary, task list, progress breakdown).
-  - `format_vector_context()`: Chuẩn hóa dữ liệu ngữ nghĩa vector RAG kèm bảng nguồn, mã bản ghi, dự án và điểm tương đồng.
-  - `estimate_tokens()`: Ước lượng token tất định cho tiếng Việt kỹ thuật (~3.5 chars/token).
-  - `synthesize()`: Ghép nối hoàn chỉnh prompt payload và đính kèm metadata kiểm toán.
-
-### B. `src/titsmart_ai/synthesis/response_formatter.py`
-- **`ResponseFormatter`**:
-  - `deduplicate_sources()`: Khử trùng lặp nguồn trích dẫn theo tuple `(source_type, source_table, record_id, project_code)`, ưu tiên giữ bản ghi có điểm tương quan cao nhất.
-  - `format_citations_catalog()`: Tạo danh mục trích dẫn Markdown chuẩn mực:
-    `- [Nguồn X] (TYPE: table/id | Dự án: code | Điểm tương quan: score): label`
-  - `validate_citations()`: Xác thực cấu trúc dữ liệu `ChatSource`, source_type (`sql` / `vector`) và các trường bắt buộc.
-  - `format_sql_project_summary()`: Định dạng kết quả tổng quan tiến độ 1 dự án và danh sách công việc chậm.
-  - `format_sql_aggregate_progress()`: Định dạng thống kê tiến độ nhiều dự án trong phạm vi quyền hạn.
-  - `format_vector_response()`: Định dạng trích xuất nhật ký / sự cố hiện trường.
-  - `format_hybrid_response()`: Tổng hợp số liệu định lượng (SQL) và ngữ cảnh định tính (Vector RAG), loại bỏ trùng lặp citation ở từng phần để đính kèm 1 danh mục trích dẫn thống nhất.
-  - `format_unsupported()` & `format_no_evidence()`: Chuẩn hóa phản hồi khi từ chối hoặc không có bằng chứng với `has_evidence=False`.
-  - `standardize_technical_answer()`: Hàm tổng quát chuẩn hóa câu trả lời kỹ thuật và danh mục nguồn.
-
-### C. Tích hợp `ChatEngine` (`src/titsmart_ai/domain/chat_engine.py`)
-- Nhận `PromptSynthesizer` và `ResponseFormatter` qua constructor (hỗ trợ Dependency Injection).
-- Cập nhật các luồng `_handle_sql_intent`, `_handle_vector_intent`, `_handle_hybrid_intent` ủy thác hoàn toàn việc định dạng và trích dẫn cho `ResponseFormatter`.
-- Thêm method `synthesize_prompt(question, auth_context)`: Tự động trích xuất dữ liệu phù hợp theo intent và trả về `SynthesizedPrompt`, tuân thủ nghiêm ngặt nguyên tắc Fail-Closed (chặn ngay lập tức nếu user không có quyền truy cập dự án).
+### Những phần KHÔNG sao chép để bảo vệ an toàn cho `titsmart-ai-service`:
+- **KHÔNG dùng kết nối trực tiếp PostgreSQL raw connection string** (`postgresql://...`): `titsmart-ai-service` phải dùng `ReadOnlyDataClient` và Supabase PostgREST client với hostname allowlist và RLS `auth.uid()`.
+- **KHÔNG bỏ qua ACL**: ProjectLens tìm kiếm toàn bộ `rag_chunks` không có bộ lọc `project_codes`. Ở `titsmart-ai-service`, bắt buộc giữ nguyên **Fail-Closed ACL**: lọc `project_codes` trước khi truy vấn và trước khi ghép vào prompt.
+- **KHÔNG phụ thuộc Ollama local cứng**: Cần thiết kế `LLMClient(Protocol)` trừu tượng để hỗ trợ cả `FakeLLMClient` (offline unit test) và `StagingLLMClient` (khi kết nối staging).
 
 ---
 
-## 3. Kết quả kiểm thử & Kiểm chứng hồi quy
-- Lệnh chạy test:
-  ```bash
-  python -m pytest tests -q
-  ```
-- Kết quả:
-  ```text
-  159 passed, 1 skipped in 0.50s
-  ```
-- Toàn bộ 37 test cases trong `tests/test_synthesis.py` bao phủ:
-  - Unit tests cho `PromptSynthesizer` (system prompt, sql/vector context, token estimation, prompt synthesis theo từng intent).
-  - Unit tests cho `ResponseFormatter` (deduplication, format citations catalog, validate citations, format sql/vector/hybrid, unsupported, idempotency).
-  - Regression & Integration tests tích hợp `ChatEngine` (synthesize prompt, fail-closed khi không có quyền hoặc rỗng quyền, câu trả lời kèm citation minh bạch, dependency injection).
-- Không ảnh hưởng hay làm vỡ bất kỳ test case nào đã có từ Vòng 1 đến Vòng 6.
+## 2. Kế hoạch Triển khai Vòng 8 cho `titsmart-ai-service`
 
----
+1. **LLM Client Contract & Staging Adapter (`src/titsmart_ai/llm/client.py`)**:
+   - `LLMClient(Protocol)`: Phương thức `generate(system_prompt: str, user_prompt: str, timeout: float) -> str`.
+   - `FakeLLMClient`: Phục vụ 100% offline tests tất định, giả lập phản hồi tuân thủ evidence hoặc phát hiện cố tình bịa citation.
+   - `StagingLLMClient`: Chỉ cho phép kết nối endpoint staging được cấu hình trong `Settings`, cấm tuyệt đối khi `APP_ENV=production`.
+   - `Settings.LLM_MODE`: Chỉ chấp nhận `"mock"` hoặc `"staging"`, từ chối `"production"`.
 
-## 4. Phạm vi sửa đổi (Diff Scope)
-- **Thư mục mới:** `src/titsmart_ai/synthesis/` (`__init__.py`, `prompt_synthesizer.py`, `response_formatter.py`)
-- **Tập tin mới:** `tests/test_synthesis.py`
-- **Tập tin cập nhật trong src:**
-  - `src/titsmart_ai/domain/__init__.py` (re-export PromptSynthesizer, SynthesizedPrompt, ResponseFormatter)
-  - `src/titsmart_ai/domain/chat_engine.py` (tích hợp synthesis và formatting)
-- **Handoff & trạng thái:**
-  - `handoff/coder_report.md`
-  - `handoff/live_progress.md`
-  - `state.json`
+2. **Backend-Driven Citation & Anti-Hallucination Guardrails (`src/titsmart_ai/synthesis/response_formatter.py`)**:
+   - Backend chuẩn bị danh mục `sources` từ records/chunks hợp lệ.
+   - Hậu kiểm câu trả lời của LLM: Kiểm tra chéo mọi trích dẫn `[Nguon n]`. Nếu LLM tự bịa ID ngoài danh mục, backend tự động lọc bỏ.
+   - Nếu không có evidence, hệ thống từ chối trả lời và gán `has_evidence = False`.
 
-Tuyệt đối không sửa ngoài phạm vi cho phép, không kết nối production, không đọc secret, không dùng Kafka.
+3. **Kháng Prompt Injection**:
+   - Coi nội dung tài liệu là untrusted data trong sandbox, không cho phép thay đổi system prompt hoặc vượt quyền ACL.
+
+4. **Bộ Test Suite Vòng 8**:
+   - Test LLM mock mode, staging mode controls.
+   - Test fail-closed ACL không lọt dữ liệu vào prompt.
+   - Test loại bỏ citation giả.
+   - Test prompt injection kháng đổi vai trò.
+   - Test timeout và error handling.
